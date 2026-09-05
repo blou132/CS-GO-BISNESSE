@@ -1,0 +1,127 @@
+# CS2 Arbitrage Hub
+
+Application web privée d'observation des marchés de skins Counter-Strike 2.
+Cette première base normalise des listings, conserve leur provenance,
+compare les observations disponibles et sépare explicitement prix affiché,
+vente réalisée, estimation et profit. Elle n'effectue aucun achat ni trade.
+
+## Démarrage avec Docker Compose
+
+Prérequis : Git et Docker Desktop avec Compose.
+
+```powershell
+git clone https://github.com/blou132/CS-GO-BISNESSE.git
+cd CS-GO-BISNESSE
+Copy-Item .env.example .env
+```
+
+Remplacez `replace-with-local-password` dans `.env` par un mot de passe local
+URL-safe, puis lancez :
+
+```powershell
+docker compose up --build
+```
+
+Ouvrez <http://127.0.0.1:3000>. L'API est disponible sur
+<http://127.0.0.1:8000/docs>. Les ports écoutent uniquement sur la boucle
+locale et PostgreSQL n'est pas publié sur la machine hôte.
+
+Au premier démarrage, le conteneur API applique la migration Alembic avant
+de servir les requêtes. Vérifiez l'état avec :
+
+```powershell
+docker compose ps
+Invoke-RestMethod http://127.0.0.1:8000/health/ready
+```
+
+Pour arrêter les processus en conservant la base :
+
+```powershell
+docker compose down
+```
+
+`docker compose down -v` supprime aussi les données PostgreSQL ; ne l'utilisez
+que lorsque cette suppression est voulue.
+
+## Modes de données
+
+Le site s'ouvre en mode `LIVE`. Il ne bascule jamais silencieusement sur des
+données fictives. Une synchronisation live demande un nom de skin et appelle
+les API officielles configurées. Une plateforme indisponible ne bloque pas
+les résultats déjà stockés des autres sources.
+
+Le bouton **Charger la démo** initialise des fixtures synthétiques dans un mode
+de stockage distinct. Chaque écran et chaque ligne portent la mention DEMO.
+Les ventes, frais et scores de ce mode servent uniquement à vérifier le
+parcours ; ils n'ont aucune valeur de marché.
+
+## Configuration
+
+Toutes les variables sont décrites dans [.env.example](.env.example).
+
+| Variable | Requise | Usage |
+| --- | --- | --- |
+| `POSTGRES_PASSWORD` | Docker | Mot de passe PostgreSQL local |
+| `DATABASE_URL` | Hors Compose | Connexion SQLAlchemy PostgreSQL |
+| `CSFLOAT_API_KEY` | CSFloat live | Clé API transmise côté serveur |
+| `DMARKET_PUBLIC_KEY` | DMarket | Clé publique Ed25519 |
+| `DMARKET_SECRET_KEY` | DMarket | Clé privée Ed25519, serveur uniquement |
+| `FX_USD_EUR_RATE` | Facultative | EUR pour 1 USD, taux de référence |
+| `FX_RATE_SOURCE` | Avec taux FX | Source explicite du taux |
+| `FX_RATE_TIMESTAMP` | Avec taux FX | Date ISO 8601 avec fuseau |
+| `API_BASE_URL` | Frontend | Adresse privée du backend |
+
+Sans taux USD/EUR complet, les montants USD gardent leur prix et devise
+originaux mais leur valeur EUR reste `null`. Un taux de référence ne devient
+jamais un coût de change effectif.
+
+## Développement sans Docker
+
+Backend (Python 3.12+ et PostgreSQL requis) :
+
+```powershell
+py -3.13 -m pip install --user uv
+cd apps/api
+uv sync --extra dev
+$env:DATABASE_URL = "postgresql+psycopg://cs2:mot-de-passe@127.0.0.1:5432/cs2"
+uv run alembic upgrade head
+uv run uvicorn app.main:app --reload --host 127.0.0.1
+```
+
+Frontend (Node.js 20.9+ ; Node 24 LTS recommandé) :
+
+```powershell
+cd apps/web
+npm ci
+npm run dev
+```
+
+## Validation
+
+```powershell
+cd apps/api
+uv run pytest -q
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy app
+cd ..\web
+npm test
+npm run lint
+npm run typecheck
+npm run build
+```
+
+La configuration Compose peut être vérifiée sans lancer les images avec
+`docker compose config`. L'état exact des contrôles exécutés lors de cette
+livraison figure dans [docs/VALIDATION.md](docs/VALIDATION.md).
+
+## Documentation
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [Modèle de données](docs/DATA_MODEL.md)
+- [Roadmap](docs/ROADMAP.md)
+- [Audit initial](docs/AUDIT.md)
+- [Intégrations officielles](docs/integrations/)
+
+L'application n'a pas encore d'authentification utilisateur. Elle est prévue
+pour un usage privé local et ne doit pas être exposée telle quelle sur Internet.
