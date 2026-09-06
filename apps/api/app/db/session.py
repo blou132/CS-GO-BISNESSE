@@ -19,7 +19,14 @@ def build_engine(url: str) -> Engine:
                 connection.execute("PRAGMA foreign_keys=ON")
 
         return engine
-    return create_engine(url, pool_pre_ping=True)
+    return create_engine(
+        url,
+        pool_pre_ping=True,
+        pool_recycle=1800,
+        pool_size=5,
+        max_overflow=5,
+        connect_args={"connect_timeout": 5, "application_name": "cs2-arbitrage-hub"},
+    )
 
 
 def build_session_factory(engine: Engine) -> sessionmaker[Session]:

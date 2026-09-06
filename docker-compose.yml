@@ -4,13 +4,13 @@ services:
   db:
     image: postgres:17.11-alpine
     environment:
-      POSTGRES_DB: cs2
-      POSTGRES_USER: cs2
+      POSTGRES_DB: ${POSTGRES_DB:-cs2}
+      POSTGRES_USER: ${POSTGRES_USER:-cs2}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Configure POSTGRES_PASSWORD in .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: [CMD-SHELL, 'pg_isready -U cs2 -d cs2']
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
       interval: 5s
       timeout: 5s
       retries: 15
@@ -20,15 +20,28 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-    env_file: .env
     environment:
-      DATABASE_URL: postgresql+psycopg://cs2:${POSTGRES_PASSWORD}@db:5432/cs2
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-cs2}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-cs2}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      SYNC_TTL_SECONDS: ${SYNC_TTL_SECONDS:-300}
+      STALE_AFTER_SECONDS: ${STALE_AFTER_SECONDS:-3600}
+      MAX_LISTINGS: ${MAX_LISTINGS:-500}
+      HISTORY_RETENTION_DAYS: ${HISTORY_RETENTION_DAYS:-30}
+      CSFLOAT_API_KEY: ${CSFLOAT_API_KEY:-}
+      DMARKET_PUBLIC_KEY: ${DMARKET_PUBLIC_KEY:-}
+      DMARKET_SECRET_KEY: ${DMARKET_SECRET_KEY:-}
+      FX_USD_EUR_RATE: ${FX_USD_EUR_RATE:-}
+      FX_RATE_SOURCE: ${FX_RATE_SOURCE:-}
+      FX_RATE_TIMESTAMP: ${FX_RATE_TIMESTAMP:-}
+      FX_MAX_AGE_HOURS: ${FX_MAX_AGE_HOURS:-72}
     command: [sh, -c, 'alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000']
     ports:
       - '127.0.0.1:8000:8000'
     depends_on:
       db:
         condition: service_healthy
+        restart: true
     healthcheck:
       test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
       interval: 10s
@@ -51,6 +64,7 @@ services:
     depends_on:
       api:
         condition: service_healthy
+        restart: true
     healthcheck:
       test: [CMD, node, -e, "fetch('http://127.0.0.1:3000').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 15s

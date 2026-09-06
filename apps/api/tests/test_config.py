@@ -1,3 +1,6 @@
+import pytest
+from pydantic import ValidationError
+
 from app.core.config import Settings
 
 
@@ -17,3 +20,28 @@ def test_empty_optional_environment_values_are_treated_as_absent(monkeypatch) ->
     assert settings.fx_usd_eur_rate is None
     assert settings.fx_rate_source is None
     assert settings.fx_rate_timestamp is None
+
+
+def test_production_settings_require_postgresql_real_password_and_explicit_cors() -> None:
+    with pytest.raises(ValidationError, match="SQLite"):
+        Settings(_env_file=None, environment="production", database_url="sqlite:///prod.db")
+    with pytest.raises(ValidationError, match="mot de passe"):
+        Settings(
+            _env_file=None,
+            environment="production",
+            database_url=("postgresql+psycopg://cs2:replace-with-local-password@db:5432/cs2"),
+        )
+    with pytest.raises(ValidationError, match="CORS"):
+        Settings(
+            _env_file=None,
+            environment="production",
+            database_url="postgresql+psycopg://cs2:safe-test-only@db:5432/cs2",
+            cors_origins="*",
+        )
+    settings = Settings(
+        _env_file=None,
+        environment="production",
+        database_url="postgresql+psycopg://cs2:safe-test-only@db:5432/cs2",
+        cors_origins="http://127.0.0.1:3000",
+    )
+    assert settings.environment == "production"

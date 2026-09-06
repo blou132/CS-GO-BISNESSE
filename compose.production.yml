@@ -1,0 +1,53 @@
+x-logging: &production-logging
+  driver: json-file
+  options:
+    max-size: ${DOCKER_LOG_MAX_SIZE:-10m}
+    max-file: "${DOCKER_LOG_MAX_FILES:-5}"
+
+services:
+  db:
+    networks:
+      - database
+    logging: *production-logging
+    stop_grace_period: 1m
+
+  api:
+    image: cs2-arbitrage-hub-api:${IMAGE_TAG:-current}
+    command: [uvicorn, app.main:app, --host, 0.0.0.0, --port, "8000", --workers, "1"]
+    ports: !reset []
+    networks:
+      - database
+      - application
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging: *production-logging
+    stop_grace_period: 30s
+
+  web:
+    image: cs2-arbitrage-hub-web:${IMAGE_TAG:-current}
+    ports: !override
+      - ${APP_BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-3000}:3000
+    networks:
+      - application
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+      - /app/.next/cache:size=64m,uid=1000,gid=1000,mode=0755
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging: *production-logging
+    stop_grace_period: 30s
+
+networks:
+  database:
+    internal: true
+  application:

@@ -140,15 +140,15 @@ class ReadOnlyHTTP:
     ) -> None:
         # Deliberately exclude URL query, headers, request/response bodies and exceptions.
         logger.info(
-            json.dumps(
-                {
-                    "market": self.market,
-                    "endpoint": request.url.path,
-                    "status": status,
-                    "duration_ms": round((time.monotonic() - started) * 1000, 2),
-                    "error": error,
-                }
-            )
+            "market_request",
+            extra={
+                "component": "market_http",
+                "market": self.market,
+                "endpoint": request.url.path,
+                "status": status,
+                "duration": round((time.monotonic() - started) * 1000, 2),
+                "error": error,
+            },
         )
 
 

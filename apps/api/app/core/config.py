@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 from functools import lru_cache
-from typing import Self
+from typing import Literal, Self
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     )
 
     database_url: str = "postgresql+psycopg://cs2:cs2@localhost:5432/cs2"
-    environment: str = "development"
+    environment: Literal["development", "test", "production"] = "development"
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
     csfloat_api_key: SecretStr | None = None
     dmarket_public_key: SecretStr | None = None
@@ -36,6 +36,13 @@ class Settings(BaseSettings):
             "test",
         }:
             raise ValueError("SQLite est réservé au développement et aux tests.")
+        if self.environment == "production":
+            if not self.database_url.startswith("postgresql+psycopg://"):
+                raise ValueError("La production exige PostgreSQL avec le pilote psycopg.")
+            if "replace-with-local-password" in self.database_url:
+                raise ValueError("Le mot de passe PostgreSQL d'exemple doit être remplacé.")
+            if not self.allowed_origins or "*" in self.allowed_origins:
+                raise ValueError("La production exige une liste CORS explicite sans wildcard.")
         if self.fx_usd_eur_rate is not None:
             if not self.fx_rate_source or self.fx_rate_timestamp is None:
                 raise ValueError("Un taux FX exige une source et une date explicites.")
