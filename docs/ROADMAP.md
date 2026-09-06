@@ -17,6 +17,11 @@ les preuves d'exécution de cette passe.
 | V0.8 | Float Analyzer | Comparables du même skin, percentile descriptif, aucune prime universelle |
 | V0.9 | Opportunity Scanner | Score documenté, filtres, frais explicites, confiance et limites visibles |
 
+La préparation d'exploitation 24/7 complète ce socle : surcharge Compose de
+production, sauvegarde et restauration PostgreSQL, déploiement avec migration
+unique, logs bornés et états séparés de l'application, de la base et des
+sources externes. Elle ne change pas le périmètre fonctionnel du MVP.
+
 Le premier MVP vise la lecture et l'analyse. Les annonces, même nombreuses,
 ne suffisent pas à établir une valeur de revente fiable. L'absence d'historique
 de ventes ou de frais effectifs doit produire une valeur inconnue, pas un

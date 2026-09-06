@@ -115,9 +115,27 @@ La configuration Compose peut être vérifiée sans lancer les images avec
 `docker compose config`. L'état exact des contrôles exécutés lors de cette
 livraison figure dans [docs/VALIDATION.md](docs/VALIDATION.md).
 
+## Déploiement Linux 24/7
+
+La surcharge `compose.production.yml` conserve la stack de développement et
+ajoute l'exécution production, les réseaux isolés, le durcissement des
+conteneurs, les logs bornés et un port frontend configurable. La configuration
+se trouve dans `.env.production`, ignoré par Git.
+
+Sur le serveur, après avoir copié et renseigné `.env.production` :
+
+```bash
+./scripts/deploy.sh
+```
+
+La procédure complète, les migrations uniques, les sauvegardes, la
+restauration et le rollback sont décrits dans
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
+- [Déploiement Linux](docs/DEPLOYMENT.md)
 - [Modèle de données](docs/DATA_MODEL.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Audit initial](docs/AUDIT.md)

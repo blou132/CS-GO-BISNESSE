@@ -1,28 +1,31 @@
-# Validation — 5 septembre 2026
+# Validation — 6 septembre 2026
 
 ## Environnement de contrôle
 
-- Windows, Python 3.13.7 et uv 0.12.10
-- Node.js 26.8.1 et npm 11.19.0
-- PostgreSQL 17.11 local temporaire, limité à `127.0.0.1:55432`
-- Docker Compose 5.5.1 pour la validation du manifeste
+- Windows, Python 3.13.7 et uv 0.12.10 ;
+- Node.js 26.8.1 et npm 11.19.0 ;
+- PostgreSQL 17.11 local temporaire, limité à `127.0.0.1:55432` ;
+- Docker Compose 5.5.1 pour la validation statique des manifestes ;
+- Chromium piloté par agent-browser 0.36.0 pour le contrôle visuel.
 
-Les outils et données temporaires sont rangés dans `.tools/`, ignoré par Git.
-Aucun secret réel n'a été utilisé.
+Les outils, données et captures temporaires sont dans `.tools/` ou
+`artifacts/`, ignorés par Git. Aucun secret réel n'a été utilisé.
 
 ## Backend
 
 | Contrôle | Résultat |
 | --- | --- |
 | `ruff check apps/api` | Succès |
-| `ruff format --check apps/api` | 35 fichiers conformes |
-| `mypy apps/api/app` | Succès, 29 fichiers |
-| `pytest apps/api/tests -q` | 14 tests réussis |
-| Alembic `downgrade base` puis `upgrade head` | Succès sur PostgreSQL 17.11 |
-| Alembic `current` | `310b4bb61557 (head)` |
+| `ruff format --check apps/api` | 38 fichiers conformes |
+| `mypy apps/api/app` | Succès, 30 fichiers |
+| `pytest apps/api/tests -q` | 18 tests réussis |
+| Alembic `upgrade`, `downgrade` puis `upgrade head` | Succès sur PostgreSQL 17.11 |
+| Alembic `current` | `7d9e1c84b2f0 (head)` |
 | Alembic `check` | Aucune opération manquante |
-| Healthcheck `/health/ready` | `200`, `status: ok` |
-| Calcul de profit API | 102 EUR de coût, 14 EUR net, ROI 13,72549 % pour le cas contrôlé |
+| Conservation pendant la migration | 16 objets, 16 annonces, 138 observations et 6 états conservés |
+| `/health/live` | Processus API en HTTP 200 |
+| `/health/ready` | PostgreSQL joignable en HTTP 200 ; test dédié en HTTP 503 lors d'une panne simulée |
+| `/health/status` | API, base et trois marketplaces séparées, sans clé ou secret |
 
 Pytest signale deux avertissements de dépréciation provenant de FastAPI/
 Starlette et de leurs dépendances de test. Ils ne concernent pas le code du
@@ -32,33 +35,50 @@ projet et aucun test n'est ignoré.
 
 | Contrôle | Résultat |
 | --- | --- |
-| `npm test -- --run` | 2 tests réussis |
+| `npm test` | 2 tests réussis |
 | `npm run lint` | Succès |
 | `npm run typecheck` | Succès, routes Next.js générées |
-| `npm run build` | Succès, 8 routes produites |
-| Serveur standalone de production | Page et feuille CSS en HTTP 200 |
+| `npm run build` | Succès, 9 routes produites dont `/api/health` |
+| Serveur standalone de production | HTML, CSS et JavaScript en HTTP 200 |
 | `npm audit --audit-level=high` | 0 vulnérabilité connue |
 
-Le serveur standalone renvoie aussi les en-têtes `nosniff`, `DENY` et
-`no-referrer` configurés. La vérification navigateur a couvert le dashboard, le scanner, le filtre de
-profit, le détail d'un objet, la page Marchés et une fenêtre mobile de 390 px.
-La démo contient 16 listings synthétiques CSFloat/DMarket et huit agrégats
-Skinport synthétiques. L'étiquette DEMO, la nature des observations et les
-limites de calcul restent visibles. Aucune erreur console n'a été relevée.
+La vérification navigateur a couvert la page Marchés en desktop et à 390 px.
+Elle confirme l'affichage réel de l'API, de PostgreSQL, des états externes, du
+dernier essai, du dernier succès et de la dernière erreur. Le passage explicite
+en mode DEMO conserve son avertissement et ses données isolées. Aucune erreur
+navigateur n'a été relevée.
+
+## Infrastructure et scripts
+
+| Contrôle | Résultat |
+| --- | --- |
+| Compose développement `config --quiet` | Succès |
+| Compose développement + production `config --quiet` | Succès |
+| Modèle Compose production JSON | Réseaux, ports, volume, dépendances, commandes et durcissement conformes |
+| `bash -n` sur les scripts | Succès |
+| `scripts/tests/backup-common-test.sh` | Succès |
+| `git diff --check` | Succès |
+
+Le test du modèle fusionné confirme notamment que PostgreSQL et FastAPI ne
+publient aucun port, que le frontend écoute sur `127.0.0.1:3000`, que le réseau
+PostgreSQL est interne, que le volume nommé est conservé et que la commande API
+production ne lance ni Alembic ni reload.
+
+Le moteur Docker n'est pas installé sur cette machine. Les images n'ont donc
+pas été construites ni démarrées dans des conteneurs ici. `pg_dump`,
+`pg_restore`, les healthchecks Docker, le système de fichiers en lecture seule,
+la rotation `json-file` et le script de déploiement complet restent à valider
+sur la machine Linux disposant de Docker Engine.
 
 ## Intégrations live
 
-- Skinport : appel officiel `GET /v1/items` réussi en HTTP 200. L'agrégat est
-  stocké comme `AGGREGATE`, sans inventer de listing individuel.
-- CSFloat : l'appel sans clé a renvoyé HTTP 403 lors de la recherche initiale.
-  L'adaptateur exige maintenant `CSFLOAT_API_KEY` avant tout appel ; aucune
-  annonce réelle n'est revendiquée.
-- DMarket : signature Ed25519 et réponse V2 validées par fixtures HTTP. Aucun
-  appel réel n'a été fait faute de clés personnelles.
+Les appels live du 5 septembre n'ont pas été rejoués pendant cette passe :
 
-## Infrastructure
+- Skinport avait répondu en HTTP 200 via son endpoint officiel et son agrégat
+  avait été stocké comme `AGGREGATE` ;
+- CSFloat exige une clé absente de l'environnement de contrôle ;
+- DMarket reste validé par fixtures signées, sans appel personnel faute de
+  clés.
 
-`docker compose --env-file .env config --quiet` valide les services `db`,
-`api` et `web`, y compris la substitution des variables. Le moteur Docker
-n'est pas installé sur la machine de contrôle : la construction et le
-démarrage effectifs des images n'ont donc pas pu être exécutés ici.
+L'endpoint système a exposé ces limites comme `unavailable` ou `stale`, sans
+les convertir en état ONLINE et sans rendre l'application unhealthy.

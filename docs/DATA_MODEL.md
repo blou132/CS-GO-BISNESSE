@@ -44,7 +44,9 @@ une vente ni un listing individuel.
 
 Dernier essai et dernier succès par plateforme et mode. Une erreur met à jour
 l'essai et le message, mais ne modifie pas la date du dernier succès ni les
-données déjà conservées.
+données déjà conservées. `last_error` et `last_error_at` restent donc
+consultables après une reprise réussie : l'état courant et l'historique du
+dernier incident sont exposés séparément par l'endpoint système.
 
 ### `pattern_rules`
 

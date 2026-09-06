@@ -72,6 +72,31 @@ Un seul processus API est prévu au départ : le cache et le contrôle de
 concurrence sont locaux au processus. Avant plusieurs workers, déplacer
 le contrôle des quotas et la planification dans une coordination partagée.
 
+## Exécution de production
+
+`compose.production.yml` surcharge la configuration locale sans la dupliquer.
+PostgreSQL n'appartient qu'au réseau interne `database`. L'API relie ce réseau
+au réseau `application`, où elle communique avec Next.js ; seul le frontend
+publie un port sur l'hôte, lié à `127.0.0.1` par défaut. Les trois services ont
+une politique `unless-stopped` et démarrent selon leurs vrais healthchecks.
+
+Les images applicatives s'exécutent sans privilèges root, avec un système de
+fichiers en lecture seule, un `/tmp` borné et toutes les capabilities Linux
+retirées. Le cache d'exécution Next.js possède son propre `tmpfs` borné. L'API
+utilise un seul worker Uvicorn sans reload. Les migrations ne font pas partie
+de sa commande permanente : le déploiement lance un conteneur Alembic ponctuel
+afin qu'une seule migration soit active.
+
+`/health/live` vérifie seulement le processus API, `/health/ready` vérifie la
+connexion PostgreSQL et `/health/status` rapporte séparément l'API, la base et
+les derniers états persistés de CSFloat, Skinport et DMarket. L'indisponibilité
+d'une source externe reste visible sans provoquer le redémarrage de l'API.
+
+Le volume nommé `postgres_data` persiste les données. Les dumps custom créés
+par `scripts/backup-db.sh` forment une seconde couche de récupération, avec
+rotation limitée à un répertoire marqué. Le déroulé opérationnel complet se
+trouve dans [DEPLOYMENT.md](DEPLOYMENT.md).
+
 ## Extensions futures
 
 Le Trade Engine utilisera un autre contrat d'adaptation : `TradeQuote`
