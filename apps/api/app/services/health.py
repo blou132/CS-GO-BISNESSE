@@ -27,7 +27,7 @@ def system_health(session: Session, settings: Settings) -> SystemHealth:
             status.platform: ExternalMarketHealth(
                 status=status.status,
                 last_attempt_at=status.last_attempt_at,
-                last_success_at=status.last_sync_at,
+                last_success_at=status.last_success_at or status.last_sync_at,
                 last_error=status.last_error,
                 last_error_at=status.last_error_at,
             )

@@ -178,3 +178,30 @@ async def test_transport_handles_invalid_json_timeout_and_rate_limit() -> None:
     assert rate_error.value.code == "rate_limited"
     assert rate_error.value.retry_after_seconds == 10
     await rate_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_transport_does_not_retry_after_429() -> None:
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(429, headers={"Retry-After": "1"})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    transport = ReadOnlyHTTP(
+        "test",
+        "https://example.test",
+        client=client,
+        min_interval=0,
+        max_retry_delay=5,
+        max_attempts=3,
+    )
+
+    with pytest.raises(MarketAdapterError) as rate_error:
+        await transport.get("/items")
+
+    assert rate_error.value.code == "rate_limited"
+    assert attempts == 1
+    await client.aclose()

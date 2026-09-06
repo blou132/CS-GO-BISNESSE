@@ -9,8 +9,18 @@ Platform = Literal["csfloat", "skinport", "dmarket"]
 IntegrationStatus = Literal[
     "OFFICIAL_API", "SUPPORTED", "PARTIAL", "RESEARCH_REQUIRED", "UNAVAILABLE"
 ]
-MarketAvailability = Literal["online", "unavailable", "error", "stale", "demo", "idle"]
+MarketAvailability = Literal[
+    "online",
+    "not_configured",
+    "unavailable",
+    "error",
+    "stale",
+    "very_stale",
+    "demo",
+    "idle",
+]
 HealthAvailability = Literal["healthy", "unavailable", "unknown"]
+Freshness = Literal["fresh", "stale", "very_stale", "unknown"]
 Money = Annotated[Decimal, Field(ge=0, allow_inf_nan=False, max_digits=20, decimal_places=8)]
 
 
@@ -57,10 +67,21 @@ class MarketStatus(BaseModel):
     integration_status: IntegrationStatus
     status: MarketAvailability
     message: str
+    freshness: Freshness = "unknown"
+    configured: bool = True
     last_sync_at: datetime | None = None
+    last_success_at: datetime | None = None
     last_attempt_at: datetime | None = None
+    last_failure_at: datetime | None = None
+    last_duration_ms: int | None = None
+    last_items_received: int = 0
+    last_items_created: int = 0
+    last_items_updated: int = 0
     last_error: str | None = None
+    last_error_code: str | None = None
     last_error_at: datetime | None = None
+    consecutive_failures: int = 0
+    next_run_at: datetime | None = None
 
 
 class ExternalMarketHealth(BaseModel):
@@ -82,6 +103,24 @@ class Dashboard(BaseModel):
     listings: list[ScannerRow]
     markets: list[MarketStatus]
     last_sync_at: datetime | None
+    warnings: list[str]
+
+
+class MarketMetrics(BaseModel):
+    total_listings: int
+    active_listings: int
+    price_observations: int
+    active_opportunities: int
+    sync_errors_24h: int
+
+
+class MarketMonitor(BaseModel):
+    mode: Mode = "live"
+    sync_enabled: bool
+    sync_query_configured: bool
+    scheduler_running: bool
+    platforms: list[MarketStatus]
+    metrics: MarketMetrics
     warnings: list[str]
 
 

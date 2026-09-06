@@ -113,13 +113,21 @@ class ReadOnlyHTTP:
                 raise MarketAdapterError("authentication", "Marketplace access denied")
             if status == 404:
                 raise MarketAdapterError("not_found", "Marketplace listing not found")
-            if status == 429 or status >= 500:
+            if status == 429:
                 delay = retry_after_seconds(response.headers.get("Retry-After"))
-                delay = delay if delay is not None else 0.5 * 2**attempt
+                delay = delay if delay is not None else 0.0
+                self._next_request_at = max(self._next_request_at, time.monotonic() + delay)
+                raise MarketAdapterError(
+                    "rate_limited", "Marketplace temporarily unavailable", delay
+                )
+            if status >= 500:
+                retry_after = retry_after_seconds(response.headers.get("Retry-After"))
+                delay = retry_after if retry_after is not None else 0.5 * 2**attempt
                 self._next_request_at = max(self._next_request_at, time.monotonic() + delay)
                 if delay > self.max_retry_delay or attempt + 1 == self.max_attempts:
-                    code = "rate_limited" if status == 429 else "unavailable"
-                    raise MarketAdapterError(code, "Marketplace temporarily unavailable", delay)
+                    raise MarketAdapterError(
+                        "unavailable", "Marketplace temporarily unavailable", delay
+                    )
                 # The next iteration waits until at least Retry-After. Never truncate it.
                 continue
             if status != 200:

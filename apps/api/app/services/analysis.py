@@ -8,13 +8,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import Settings
-from app.models import CS2Item, MarketListing, MarketSyncState, PriceObservation
+from app.models import CS2Item, MarketListing, MarketOpportunity, MarketSyncState, PriceObservation
 from app.pricing.comparison import float_score, summarize
 from app.pricing.finance import ProfitInput, calculate_profit
 from app.pricing.opportunity import OpportunityComponents, calculate_opportunity_score
 from app.schemas.api import (
     Comparison,
     Dashboard,
+    Freshness,
     IntegrationStatus,
     ItemDetail,
     MarketAvailability,
@@ -134,7 +135,7 @@ def _load(session: Session, mode: Mode) -> tuple[list[MarketListing], list[Price
     listings = list(
         session.scalars(
             select(MarketListing)
-            .where(MarketListing.mode == mode)
+            .where(MarketListing.mode == mode, MarketListing.status == "ACTIVE")
             .options(selectinload(MarketListing.item).selectinload(CS2Item.stickers))
             .order_by(MarketListing.observed_at.desc(), MarketListing.id)
         )
@@ -200,44 +201,58 @@ def market_statuses(session: Session, mode: Mode, settings: Settings) -> list[Ma
     now = datetime.now(UTC)
     for platform in PLATFORMS:
         state = states.get(platform)
+        configured = _platform_configured(platform, settings)
         if state is None:
             status: MarketAvailability = "idle"
             message = "Synchronisation non exécutée."
-            if platform == "csfloat" and settings.csfloat_api_key is None:
-                status = "unavailable"
-                message = "Clé CSFloat non configurée."
-            if platform == "dmarket" and (
-                settings.dmarket_public_key is None or settings.dmarket_secret_key is None
-            ):
-                status = "unavailable"
-                message = "Clés DMarket non configurées."
+            if not configured:
+                status = "not_configured"
+                message = _not_configured_message(platform)
             result.append(
                 MarketStatus(
                     platform=platform,
                     integration_status=INTEGRATION_STATUS[platform],
                     status=status,
                     message=message,
+                    freshness="unknown",
+                    configured=configured,
                 )
             )
             continue
+        success_at = state.last_success_at or state.last_sync_at
+        freshness = _freshness(success_at, settings, now)
         status = cast(MarketAvailability, state.status)
-        if (
-            mode == "live"
-            and state.last_sync_at is not None
-            and status == "online"
-            and (now - _aware(state.last_sync_at)).total_seconds() > settings.stale_after_seconds
-        ):
-            status = "stale"
+        if mode == "live" and not configured:
+            status = "not_configured"
+            message = _not_configured_message(platform)
+        else:
+            message = state.message
+        if mode == "live" and status == "online":
+            if freshness == "very_stale":
+                status = "very_stale"
+            elif freshness == "stale":
+                status = "stale"
         result.append(
             MarketStatus(
                 platform=platform,
                 integration_status=INTEGRATION_STATUS[platform],
                 status=status,
-                message=state.message,
-                last_sync_at=state.last_sync_at,
+                message=message,
+                freshness=freshness,
+                configured=configured,
+                last_sync_at=success_at,
+                last_success_at=success_at,
                 last_attempt_at=state.last_attempt_at,
-                last_error=state.last_error,
-                last_error_at=state.last_error_at,
+                last_failure_at=state.last_failure_at or state.last_error_at,
+                last_duration_ms=state.last_duration_ms,
+                last_items_received=state.last_items_received,
+                last_items_created=state.last_items_created,
+                last_items_updated=state.last_items_updated,
+                last_error=state.last_error_message or state.last_error,
+                last_error_code=state.last_error_code,
+                last_error_at=state.last_failure_at or state.last_error_at,
+                consecutive_failures=state.consecutive_failures,
+                next_run_at=state.next_run_at,
             )
         )
     return result
@@ -245,6 +260,38 @@ def market_statuses(session: Session, mode: Mode, settings: Settings) -> list[Ma
 
 def _aware(value: datetime) -> datetime:
     return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
+def _platform_configured(platform: Platform, settings: Settings) -> bool:
+    if platform == "csfloat":
+        return settings.csfloat_api_key is not None
+    if platform == "dmarket":
+        return settings.dmarket_public_key is not None and settings.dmarket_secret_key is not None
+    return True
+
+
+def _not_configured_message(platform: Platform) -> str:
+    if platform == "csfloat":
+        return "Clé CSFloat non configurée; connecteur optionnel en attente."
+    if platform == "dmarket":
+        return "Clés DMarket non configurées; connecteur optionnel en attente."
+    return "Connecteur non configuré."
+
+
+def _freshness(
+    last_success_at: datetime | None,
+    settings: Settings,
+    now: datetime | None = None,
+) -> Freshness:
+    if last_success_at is None:
+        return "unknown"
+    current = now or datetime.now(UTC)
+    age = (current - _aware(last_success_at)).total_seconds()
+    if age > settings.very_stale_after_seconds:
+        return "very_stale"
+    if age > settings.stale_after_seconds:
+        return "stale"
+    return "fresh"
 
 
 def build_dashboard(session: Session, mode: Mode, settings: Settings) -> Dashboard:
@@ -267,8 +314,10 @@ def build_dashboard(session: Session, mode: Mode, settings: Settings) -> Dashboa
         warnings.append("DEMO — toutes les données sont des fixtures synthétiques isolées du réel.")
     if any(row.price_eur_reference is None for row in rows):
         warnings.append("Certains prix n'ont pas de taux EUR sourcé et ne sont pas comparables.")
-    if any(status.status in {"error", "unavailable", "stale"} for status in statuses):
+    if any(status.status in {"error", "unavailable", "stale", "very_stale"} for status in statuses):
         warnings.append("Une ou plusieurs plateformes sont indisponibles ou périmées.")
+    if any(status.status == "not_configured" for status in statuses):
+        warnings.append("Certaines plateformes optionnelles ne sont pas configurées.")
     return Dashboard(
         mode=mode,
         listings=rows,
@@ -342,3 +391,68 @@ def build_item_detail(
         history=[Observation.model_validate(item) for item in observations],
         warnings=dashboard.warnings,
     )
+
+
+def refresh_opportunities(session: Session, mode: Mode, settings: Settings) -> int:
+    listings, observations = _load(session, mode)
+    by_name: dict[str, list[PriceObservation]] = defaultdict(list)
+    floats: dict[str, list[Decimal]] = defaultdict(list)
+    for observation in observations:
+        by_name[observation.market_hash_name].append(observation)
+    for listing in listings:
+        if listing.item.float_value is not None:
+            floats[listing.item.market_hash_name].append(listing.item.float_value)
+
+    now = datetime.now(UTC)
+    active_listing_ids: set[str] = set()
+    count = 0
+    for listing in listings:
+        analysis = _analyse(
+            listing,
+            by_name.get(listing.item.market_hash_name, []),
+            floats.get(listing.item.market_hash_name, []),
+            mode,
+        )
+        if analysis.opportunity_score is None:
+            continue
+        opportunity = session.scalar(
+            select(MarketOpportunity).where(
+                MarketOpportunity.mode == mode,
+                MarketOpportunity.listing_id == listing.id,
+            )
+        )
+        if opportunity is None:
+            opportunity = MarketOpportunity(
+                mode=mode,
+                listing_id=listing.id,
+                detected_at=now,
+                created_at=now,
+            )
+            session.add(opportunity)
+        opportunity.platform = listing.platform
+        opportunity.market_hash_name = listing.item.market_hash_name
+        opportunity.status = "ACTIVE"
+        opportunity.score = analysis.opportunity_score
+        opportunity.estimated_value_eur = analysis.estimated_value
+        opportunity.potential_profit_eur = analysis.potential_profit
+        opportunity.roi = analysis.roi
+        opportunity.reason = (
+            "Score calculé à partir du prix, de l'historique, de la liquidité et du float."
+        )
+        opportunity.last_seen_at = now
+        opportunity.updated_at = now
+        active_listing_ids.add(listing.id)
+        count += 1
+
+    existing = session.scalars(
+        select(MarketOpportunity).where(
+            MarketOpportunity.mode == mode,
+            MarketOpportunity.status == "ACTIVE",
+        )
+    )
+    for opportunity in existing:
+        if opportunity.listing_id not in active_listing_ids:
+            opportunity.status = "INACTIVE"
+            opportunity.updated_at = now
+    session.flush()
+    return count

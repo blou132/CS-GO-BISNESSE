@@ -22,6 +22,13 @@ class Settings(BaseSettings):
     dmarket_secret_key: SecretStr | None = None
     sync_ttl_seconds: int = Field(default=300, ge=60, le=86400)
     stale_after_seconds: int = Field(default=3600, ge=60)
+    very_stale_after_seconds: int = Field(default=86400, ge=300)
+    price_observation_min_interval_seconds: int = Field(default=3600, ge=60, le=86400)
+    market_sync_enabled: bool = False
+    market_sync_query: str = Field(default="", max_length=512)
+    csfloat_sync_interval_seconds: int = Field(default=900, ge=60)
+    skinport_sync_interval_seconds: int = Field(default=900, ge=300)
+    dmarket_sync_interval_seconds: int = Field(default=900, ge=60)
     max_listings: int = Field(default=500, ge=1, le=2000)
     history_retention_days: int = Field(default=30, ge=1, le=365)
     fx_usd_eur_rate: Decimal | None = Field(default=None, gt=0, allow_inf_nan=False)
@@ -43,6 +50,15 @@ class Settings(BaseSettings):
                 raise ValueError("Le mot de passe PostgreSQL d'exemple doit être remplacé.")
             if not self.allowed_origins or "*" in self.allowed_origins:
                 raise ValueError("La production exige une liste CORS explicite sans wildcard.")
+        if self.very_stale_after_seconds < self.stale_after_seconds:
+            raise ValueError("VERY_STALE_AFTER_SECONDS doit être supérieur à STALE_AFTER_SECONDS.")
+        if self.market_sync_query and any(ord(char) < 32 for char in self.market_sync_query):
+            raise ValueError("MARKET_SYNC_QUERY contient un caractère de contrôle.")
+        if self.market_sync_enabled and len(self.market_sync_query.strip()) < 3:
+            raise ValueError(
+                "MARKET_SYNC_QUERY doit contenir au moins 3 caractères "
+                "quand MARKET_SYNC_ENABLED=true."
+            )
         if self.fx_usd_eur_rate is not None:
             if not self.fx_rate_source or self.fx_rate_timestamp is None:
                 raise ValueError("Un taux FX exige une source et une date explicites.")

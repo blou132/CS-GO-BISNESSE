@@ -14,7 +14,20 @@ class JsonFormatter(logging.Formatter):
         payload.update(
             {
                 key: getattr(record, key)
-                for key in ("market", "endpoint", "status", "duration", "error")
+                for key in (
+                    "market",
+                    "endpoint",
+                    "event",
+                    "mode",
+                    "status",
+                    "duration",
+                    "duration_ms",
+                    "items_received",
+                    "items_created",
+                    "items_updated",
+                    "error",
+                    "error_code",
+                )
                 if hasattr(record, key)
             }
         )

@@ -31,6 +31,10 @@ def test_health_demo_and_live_are_isolated(tmp_path, monkeypatch) -> None:
             assert system.json()["api"] == "healthy"
             assert system.json()["database"] == "healthy"
             assert system.json()["markets"]["skinport"]["status"] == "idle"
+            monitor = client.get("/api/market-monitor")
+            assert monitor.status_code == 200
+            assert monitor.json()["sync_enabled"] is False
+            assert monitor.json()["metrics"]["active_listings"] == 0
             live = client.get("/api/dashboard?mode=live")
             assert live.status_code == 200
             assert live.json()["listings"] == []

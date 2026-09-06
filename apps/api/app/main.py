@@ -12,11 +12,27 @@ from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.db.session import build_engine, build_session_factory
 from app.pricing.finance import ProfitInput, calculate_profit
-from app.schemas.api import Dashboard, ItemDetail, Mode, ProfitRequest, ProfitResponse, SystemHealth
+from app.schemas.api import (
+    Dashboard,
+    ItemDetail,
+    MarketMonitor,
+    Mode,
+    ProfitRequest,
+    ProfitResponse,
+    SystemHealth,
+)
 from app.services.analysis import build_dashboard, build_item_detail
 from app.services.demo import ensure_demo
 from app.services.health import system_health
-from app.services.sync import build_adapters, close_adapters, synchronize
+from app.services.monitoring import build_market_monitor
+from app.services.scheduler import MarketSyncScheduler
+from app.services.sync import (
+    SyncAlreadyRunning,
+    SyncCoordinator,
+    build_adapters,
+    close_adapters,
+    synchronize,
+)
 
 configure_logging()
 
@@ -29,9 +45,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.engine = engine
     app.state.sessions = build_session_factory(engine)
     app.state.adapters = build_adapters(settings)
-    yield
-    await close_adapters(app.state.adapters)
-    engine.dispose()
+    app.state.sync_coordinator = SyncCoordinator()
+    app.state.market_scheduler = MarketSyncScheduler(
+        app.state.sessions,
+        app.state.adapters,
+        settings,
+        app.state.sync_coordinator,
+    )
+    await app.state.market_scheduler.start()
+    try:
+        yield
+    finally:
+        await app.state.market_scheduler.stop()
+        await close_adapters(app.state.adapters)
+        engine.dispose()
 
 
 app = FastAPI(
@@ -116,11 +143,25 @@ async def sync_markets(
         return build_dashboard(session, mode, settings)
     if query is None or not query.strip():
         raise HTTPException(status_code=422, detail="Un nom de skin est requis en mode live.")
-    await synchronize(
-        request.app.state.sessions, request.app.state.adapters, settings, query.strip()
-    )
+    try:
+        await synchronize(
+            request.app.state.sessions,
+            request.app.state.adapters,
+            settings,
+            query.strip(),
+            request.app.state.sync_coordinator,
+        )
+    except SyncAlreadyRunning as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
     session.expire_all()
     return _dashboard(session, mode, settings)
+
+
+@app.get("/api/market-monitor", response_model=MarketMonitor, tags=["analysis"])
+def market_monitor(request: Request, session: DbSession, settings: SettingsDep) -> MarketMonitor:
+    scheduler = getattr(request.app.state, "market_scheduler", None)
+    scheduler_running = bool(scheduler and scheduler.running)
+    return build_market_monitor(session, settings, scheduler_running=scheduler_running)
 
 
 @app.get("/api/items/{listing_id}", response_model=ItemDetail, tags=["analysis"])

@@ -45,3 +45,23 @@ def test_production_settings_require_postgresql_real_password_and_explicit_cors(
         cors_origins="http://127.0.0.1:3000",
     )
     assert settings.environment == "production"
+
+
+def test_market_monitoring_settings_are_validated() -> None:
+    with pytest.raises(ValidationError, match="MARKET_SYNC_QUERY"):
+        Settings(_env_file=None, market_sync_enabled=True, market_sync_query="")
+    with pytest.raises(ValidationError, match="VERY_STALE_AFTER_SECONDS"):
+        Settings(
+            _env_file=None,
+            stale_after_seconds=3600,
+            very_stale_after_seconds=300,
+        )
+    settings = Settings(
+        _env_file=None,
+        market_sync_enabled=True,
+        market_sync_query="AK-47 | Redline",
+        csfloat_sync_interval_seconds=120,
+        dmarket_sync_interval_seconds=120,
+        skinport_sync_interval_seconds=300,
+    )
+    assert settings.market_sync_enabled is True

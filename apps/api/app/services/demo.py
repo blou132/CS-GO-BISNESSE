@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.markets.base import AdapterItem, AdapterListing, AdapterObservation, AdapterResult
 from app.models import MarketListing, MarketSyncState
+from app.services.analysis import refresh_opportunities
 from app.services.storage import persist_result
 
 DEMO_WARNING = "DEMO — données synthétiques, aucune annonce réelle ni opportunité garantie."
@@ -72,6 +73,7 @@ def ensure_demo(session: Session, settings: Settings) -> None:
                 status="demo",
                 message=DEMO_WARNING,
                 last_sync_at=now,
+                last_success_at=now,
                 last_attempt_at=now,
             )
         )
@@ -98,7 +100,9 @@ def ensure_demo(session: Session, settings: Settings) -> None:
             status="demo",
             message=DEMO_WARNING,
             last_sync_at=now,
+            last_success_at=now,
             last_attempt_at=now,
         )
     )
+    refresh_opportunities(session, "demo", settings)
     session.commit()

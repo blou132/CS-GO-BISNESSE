@@ -1,4 +1,5 @@
 import hashlib
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
@@ -12,6 +13,14 @@ from app.models import CS2Item, ItemSticker, MarketListing, PriceObservation
 from app.schemas.api import Mode
 
 
+@dataclass
+class PersistenceStats:
+    items_received: int = 0
+    listings_created: int = 0
+    listings_updated: int = 0
+    observations_created: int = 0
+
+
 def aware(value: datetime) -> datetime:
     return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
@@ -22,7 +31,7 @@ def store_listing(
     platform: str,
     mode: Mode,
     settings: Settings,
-) -> MarketListing:
+) -> tuple[MarketListing, bool]:
     item = session.scalar(
         select(CS2Item).where(
             CS2Item.mode == mode,
@@ -44,6 +53,7 @@ def store_listing(
             MarketListing.external_id == data.external_id,
         )
     )
+    created = listing is None
     if listing is None:
         listing = MarketListing(
             mode=mode,
@@ -58,13 +68,15 @@ def store_listing(
     listing.listed_at = data.listed_at
     listing.listing_url = data.listing_url
     listing.warnings = data.warnings
+    listing.last_seen_at = data.observed_at
+    listing.status = "ACTIVE"
     (
         listing.price_eur_reference,
         listing.fx_rate,
         listing.fx_rate_timestamp,
         listing.fx_rate_source,
     ) = normalize_price(data.price, data.currency, settings, datetime.now(UTC))
-    return listing
+    return listing, created
 
 
 def store_observation(
@@ -74,7 +86,9 @@ def store_observation(
     mode: Mode,
     settings: Settings,
     external_id: str = "aggregate",
-) -> None:
+) -> bool:
+    if _is_repeated_listing_observation(session, data, platform, mode, settings):
+        return False
     fingerprint = hashlib.sha256(
         "|".join(
             [
@@ -95,7 +109,7 @@ def store_observation(
             PriceObservation.fingerprint == fingerprint,
         )
     ):
-        return
+        return False
     converted, rate, rate_date, source = normalize_price(
         data.price,
         data.currency,
@@ -119,6 +133,38 @@ def store_observation(
             fx_rate_source=source,
         )
     )
+    return True
+
+
+def _is_repeated_listing_observation(
+    session: Session,
+    data: AdapterObservation,
+    platform: str,
+    mode: Mode,
+    settings: Settings,
+) -> bool:
+    if data.observation_type != "LISTING":
+        return False
+    cutoff = aware(data.timestamp) - timedelta(
+        seconds=settings.price_observation_min_interval_seconds
+    )
+    return (
+        session.scalar(
+            select(PriceObservation.id)
+            .where(
+                PriceObservation.mode == mode,
+                PriceObservation.platform == platform,
+                PriceObservation.market_hash_name == data.market_hash_name,
+                PriceObservation.observation_type == "LISTING",
+                PriceObservation.price == data.price,
+                PriceObservation.currency == data.currency,
+                PriceObservation.timestamp >= cutoff,
+            )
+            .order_by(PriceObservation.timestamp.desc())
+            .limit(1)
+        )
+        is not None
+    )
 
 
 def persist_result(
@@ -127,10 +173,17 @@ def persist_result(
     platform: str,
     mode: Mode,
     settings: Settings,
-) -> None:
+) -> PersistenceStats:
+    stats = PersistenceStats(
+        items_received=len(result.listings) + len(result.observations),
+    )
     for data in result.listings[:50]:
-        store_listing(session, data, platform, mode, settings)
-        store_observation(
+        _, created = store_listing(session, data, platform, mode, settings)
+        if created:
+            stats.listings_created += 1
+        else:
+            stats.listings_updated += 1
+        if store_observation(
             session,
             AdapterObservation(
                 market_hash_name=data.item.market_hash_name,
@@ -144,11 +197,14 @@ def persist_result(
             mode,
             settings,
             data.external_id,
-        )
+        ):
+            stats.observations_created += 1
     for observation in result.observations[:100]:
-        store_observation(session, observation, platform, mode, settings)
+        if store_observation(session, observation, platform, mode, settings):
+            stats.observations_created += 1
     session.flush()
     prune(session, mode, settings)
+    return stats
 
 
 def prune(session: Session, mode: Mode, settings: Settings) -> None:
@@ -159,19 +215,17 @@ def prune(session: Session, mode: Mode, settings: Settings) -> None:
             PriceObservation.timestamp < cutoff,
         )
     )
-    stale = session.scalars(
+    stale_listings = session.scalars(
         select(MarketListing)
         .where(
             MarketListing.mode == mode,
+            MarketListing.status == "ACTIVE",
         )
         .order_by(MarketListing.observed_at.desc(), MarketListing.id)
         .offset(settings.max_listings)
     ).all()
-    for listing in stale:
-        item = listing.item
-        session.delete(listing)
-        session.flush()
-        session.delete(item)
+    for listing in stale_listings:
+        listing.status = "INACTIVE"
 
 
 def decimal_string(value: Decimal | None) -> str | None:
