@@ -21,6 +21,7 @@ jobs:
       - run: uv sync --frozen --extra dev
       - run: uv run pytest -q
       - run: uv run ruff check .
+      - run: uv run ruff format --check .
       - run: uv run mypy app
 
   frontend:
@@ -40,3 +41,15 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run build
+
+  infrastructure:
+    runs-on: ubuntu-latest
+    env:
+      ENVIRONMENT: production
+      POSTGRES_PASSWORD: compose-validation-only
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker compose --env-file .env.example -f docker-compose.yml -f compose.production.yml config --quiet
+      - run: docker compose --env-file .env.example -f docker-compose.yml -f compose.production.yml config --format json | python3 scripts/tests/production-compose-test.py
+      - run: bash -n scripts/lib/*.sh scripts/*.sh scripts/tests/*.sh
+      - run: bash scripts/tests/backup-common-test.sh
