@@ -1,6 +1,6 @@
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,9 +12,10 @@ from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.db.session import build_engine, build_session_factory
 from app.pricing.finance import ProfitInput, calculate_profit
-from app.schemas.api import Dashboard, ItemDetail, Mode, ProfitRequest, ProfitResponse
+from app.schemas.api import Dashboard, ItemDetail, Mode, ProfitRequest, ProfitResponse, SystemHealth
 from app.services.analysis import build_dashboard, build_item_detail
 from app.services.demo import ensure_demo
+from app.services.health import system_health
 from app.services.sync import build_adapters, close_adapters, synchronize
 
 configure_logging()
@@ -49,7 +50,7 @@ app.add_middleware(
 
 
 def sessions(request: Request) -> sessionmaker[Session]:
-    return request.app.state.sessions
+    return cast(sessionmaker[Session], request.app.state.sessions)
 
 
 def database_session(
@@ -76,6 +77,11 @@ def ready(response: Response, session: DbSession) -> dict[str, str]:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         return {"status": "unavailable"}
     return {"status": "ok"}
+
+
+@app.get("/health/status", response_model=SystemHealth, tags=["health"])
+def status_view(session: DbSession, settings: SettingsDep) -> SystemHealth:
+    return system_health(session, settings)
 
 
 def _dashboard(session: Session, mode: Mode, settings: Settings) -> Dashboard:

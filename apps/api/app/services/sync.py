@@ -75,6 +75,8 @@ async def synchronize(
                     if isinstance(result, MarketAdapterError)
                     else "Erreur interne pendant la synchronisation."
                 )
+                state.last_error = state.message
+                state.last_error_at = now
             session.commit()
 
 

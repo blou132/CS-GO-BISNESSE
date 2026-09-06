@@ -235,6 +235,9 @@ def market_statuses(session: Session, mode: Mode, settings: Settings) -> list[Ma
                 status=status,
                 message=state.message,
                 last_sync_at=state.last_sync_at,
+                last_attempt_at=state.last_attempt_at,
+                last_error=state.last_error,
+                last_error_at=state.last_error_at,
             )
         )
     return result

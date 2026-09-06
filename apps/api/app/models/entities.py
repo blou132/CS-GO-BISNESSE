@@ -139,6 +139,8 @@ class MarketSyncState(Base):
     message: Mapped[str] = mapped_column(String(1024))
     last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(String(1024))
+    last_error_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class PatternRule(Base):

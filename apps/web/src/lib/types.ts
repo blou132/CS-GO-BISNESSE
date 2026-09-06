@@ -44,6 +44,23 @@ export interface MarketStatus {
   status: "online" | "unavailable" | "error" | "stale" | "demo" | "idle";
   message: string;
   last_sync_at: string | null;
+  last_attempt_at: string | null;
+  last_error: string | null;
+  last_error_at: string | null;
+}
+
+export interface ExternalMarketHealth {
+  status: MarketStatus["status"] | "unknown";
+  last_attempt_at: string | null;
+  last_success_at: string | null;
+  last_error: string | null;
+  last_error_at: string | null;
+}
+
+export interface SystemHealth {
+  api: "healthy";
+  database: "healthy" | "unavailable" | "unknown";
+  markets: Record<Platform, ExternalMarketHealth>;
 }
 
 export interface DashboardData {

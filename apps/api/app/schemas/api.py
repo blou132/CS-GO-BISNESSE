@@ -10,6 +10,7 @@ IntegrationStatus = Literal[
     "OFFICIAL_API", "SUPPORTED", "PARTIAL", "RESEARCH_REQUIRED", "UNAVAILABLE"
 ]
 MarketAvailability = Literal["online", "unavailable", "error", "stale", "demo", "idle"]
+HealthAvailability = Literal["healthy", "unavailable", "unknown"]
 Money = Annotated[Decimal, Field(ge=0, allow_inf_nan=False, max_digits=20, decimal_places=8)]
 
 
@@ -57,6 +58,23 @@ class MarketStatus(BaseModel):
     status: MarketAvailability
     message: str
     last_sync_at: datetime | None = None
+    last_attempt_at: datetime | None = None
+    last_error: str | None = None
+    last_error_at: datetime | None = None
+
+
+class ExternalMarketHealth(BaseModel):
+    status: MarketAvailability | Literal["unknown"]
+    last_attempt_at: datetime | None = None
+    last_success_at: datetime | None = None
+    last_error: str | None = None
+    last_error_at: datetime | None = None
+
+
+class SystemHealth(BaseModel):
+    api: Literal["healthy"] = "healthy"
+    database: HealthAvailability
+    markets: dict[Platform, ExternalMarketHealth]
 
 
 class Dashboard(BaseModel):

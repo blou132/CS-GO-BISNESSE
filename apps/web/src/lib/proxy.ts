@@ -1,5 +1,24 @@
 import "server-only";
 
+const apiBaseUrl = () => process.env.API_BASE_URL ?? "http://127.0.0.1:8000";
+
+export async function proxyHealth() {
+  try {
+    const upstream = await fetch(new URL("/health/status", apiBaseUrl()), {
+      cache: "no-store",
+      signal: AbortSignal.timeout(5_000),
+      headers: { Accept: "application/json" },
+    });
+    if (!upstream.ok) {
+      return Response.json({ detail: "État système indisponible." }, { status: 502 });
+    }
+    const body: unknown = await upstream.json();
+    return Response.json(body, { headers: { "Cache-Control": "no-store" } });
+  } catch {
+    return Response.json({ detail: "API indisponible." }, { status: 503 });
+  }
+}
+
 export async function proxyApi(request: Request, path: "/api/dashboard" | "/api/sync" | `/api/items/${string}`) {
   const input = new URL(request.url);
   const mode = input.searchParams.get("mode") ?? "live";
@@ -18,7 +37,7 @@ export async function proxyApi(request: Request, path: "/api/dashboard" | "/api/
     }
   }
   try {
-    const target = new URL(path, process.env.API_BASE_URL ?? "http://127.0.0.1:8000");
+    const target = new URL(path, apiBaseUrl());
     target.searchParams.set("mode", mode);
     if (query && path === "/api/sync") target.searchParams.set("query", query);
     const upstream = await fetch(target, { method: request.method, cache: "no-store", signal: AbortSignal.timeout(90_000), headers: { Accept: "application/json" } });
