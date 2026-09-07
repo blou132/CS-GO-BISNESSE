@@ -63,17 +63,20 @@ dumps dans Git.
 Le mot de passe PostgreSQL entre dans une URL de connexion : utilisez seulement
 les lettres, chiffres et caractères `.` `_` `~` `-`, comme le vérifie le script.
 
-Générer le hash administrateur dans un terminal interactif :
+Configurer directement le fichier de production dans un terminal interactif :
 
 ```bash
-./scripts/generate-admin-password-hash.py
+./scripts/generate-admin-password-hash.py \
+  --env-file /opt/cs2-arbitrage-hub/.env.production \
+  --username admin
 ```
 
-Le script demande deux fois le mot de passe sans l'afficher et écrit uniquement
-le hash Scrypt. Copier cette sortie entre quotes simples dans
-`ADMIN_PASSWORD_HASH`. Ne placez jamais le mot de passe brut dans un fichier,
-une commande Docker, Git ou les logs. Générer séparément le secret de session,
-par exemple avec `openssl rand -hex 32`.
+Le script demande deux fois le mot de passe sans l'afficher, écrit uniquement
+le hash Scrypt par remplacement atomique et génère `SESSION_SECRET` s'il est
+absent. Il n'affiche ni le hash ni le secret dans ce mode et force les
+permissions du fichier à 600. Sans `--env-file`, il affiche seulement le hash pour
+un usage local. Ne placez jamais le mot de passe brut dans un fichier, une
+commande Docker, Git ou les logs.
 
 Conserver `SESSION_COOKIE_SECURE=false` pour un accès HTTP direct sur la boucle
 locale ou le LAN. Le passer à `true` seulement lorsque le navigateur rejoint

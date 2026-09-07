@@ -98,13 +98,13 @@ comme attendu.
 ## Monitoring live
 
 Le scheduler 24/7 est actif avec un intervalle de 900 secondes. Au relevé du
-7 septembre 2026 à 16:25 UTC :
+7 septembre 2026 à 16:40 UTC :
 
-- Skinport : `online`, 2 agrégats reçus, durée 1 072 ms ;
+- Skinport : `online`, 2 agrégats reçus, durée 1 036 ms ;
 - CSFloat : `not_configured`, clé absente ;
 - DMarket : `not_configured`, clés absentes ;
-- métriques live : 0 listing, 40 observations de prix, 0 opportunité ;
-- prochaine exécution annoncée : 16:40 UTC.
+- métriques live : 0 listing, 42 observations de prix, 0 opportunité ;
+- prochaine exécution annoncée : 16:55 UTC.
 
 Skinport reste explicitement traité comme agrégat de prix et non comme annonce
 individuelle. Les absences de clés restent informatives et ne rendent pas
@@ -117,9 +117,16 @@ HTTPS ; `gh` n'est pas installé et la clé SSH présente n'est pas autorisée p
 GitHub. Aucun credential n'a été fabriqué et aucun force-push n'a été tenté.
 
 Pour activer la V0.10 en production, l'administrateur doit choisir son mot de
-passe directement dans un terminal avec
-`./scripts/generate-admin-password-hash.py`, puis placer uniquement le hash
-entre quotes simples dans `.env.production`. Le `SESSION_SECRET` peut être
-généré automatiquement côté serveur sans exposer sa valeur. Une fois ce choix
-humain effectué, `./scripts/deploy.sh` réalisera la sauvegarde, le build, la
-migration, les healthchecks et le remplacement contrôlé du frontend.
+passe directement dans un terminal avec :
+
+```bash
+./scripts/generate-admin-password-hash.py \
+  --env-file /opt/cs2-arbitrage-hub/.env.production \
+  --username admin
+```
+
+Le script écrit
+uniquement le hash, génère le secret de session et n'affiche aucune de ces
+valeurs. Une fois ce choix humain effectué, `./scripts/deploy.sh` réalisera la
+sauvegarde, le build, la migration, les healthchecks et le remplacement
+contrôlé du frontend.
