@@ -41,12 +41,23 @@ export interface ScannerRow {
 export interface MarketStatus {
   platform: Platform;
   integration_status: "OFFICIAL_API" | "SUPPORTED" | "PARTIAL" | "RESEARCH_REQUIRED" | "UNAVAILABLE";
-  status: "online" | "unavailable" | "error" | "stale" | "demo" | "idle";
+  status: "online" | "not_configured" | "unavailable" | "error" | "stale" | "very_stale" | "demo" | "idle";
   message: string;
+  freshness: "fresh" | "stale" | "very_stale" | "unknown";
+  configured: boolean;
   last_sync_at: string | null;
+  last_success_at: string | null;
   last_attempt_at: string | null;
+  last_failure_at: string | null;
+  last_duration_ms: number | null;
+  last_items_received: number;
+  last_items_created: number;
+  last_items_updated: number;
   last_error: string | null;
+  last_error_code: string | null;
   last_error_at: string | null;
+  consecutive_failures: number;
+  next_run_at: string | null;
 }
 
 export interface ExternalMarketHealth {
@@ -68,6 +79,24 @@ export interface DashboardData {
   listings: ScannerRow[];
   markets: MarketStatus[];
   last_sync_at: string | null;
+  warnings: string[];
+}
+
+export interface MarketMetrics {
+  total_listings: number;
+  active_listings: number;
+  price_observations: number;
+  active_opportunities: number;
+  sync_errors_24h: number;
+}
+
+export interface MarketMonitorData {
+  mode: "live";
+  sync_enabled: boolean;
+  sync_query_configured: boolean;
+  scheduler_running: boolean;
+  platforms: MarketStatus[];
+  metrics: MarketMetrics;
   warnings: string[];
 }
 

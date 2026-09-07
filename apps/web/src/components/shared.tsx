@@ -22,7 +22,7 @@ export function SyncForm() {
 
 export function MarketBadge({ platform }: { platform: Platform }) { return <span className={`market-badge ${platform}`}><span className="market-symbol">{platform === "csfloat" ? "C" : platform === "skinport" ? "S" : "D"}</span>{marketNames[platform]}</span>; }
 
-const statusLabels: Record<MarketStatus["status"], string> = { online: "En ligne", unavailable: "Indisponible", error: "En erreur", stale: "Données périmées", demo: "Démo", idle: "En attente" };
+const statusLabels: Record<MarketStatus["status"], string> = { online: "En ligne", not_configured: "Non configuré", unavailable: "Indisponible", error: "En erreur", stale: "Données périmées", very_stale: "Très périmées", demo: "Démo", idle: "En attente" };
 export function StatusBadge({ status }: { status: MarketStatus["status"] }) { return <span className={`status-badge ${status}`}><i className={`status-dot ${status}`} />{statusLabels[status]}</span>; }
 
 export function EmptyState({ filtered = false }: { filtered?: boolean }) {

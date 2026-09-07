@@ -1,0 +1,77 @@
+import { describe, expect, it } from "vitest";
+import { hasBlockingMarketFailure, marketOperationalLabel, monitorSummary } from "./monitor";
+import type { MarketMonitorData, MarketStatus } from "./types";
+
+const market: MarketStatus = {
+  platform: "skinport",
+  integration_status: "PARTIAL",
+  status: "online",
+  message: "Synchronisation réussie.",
+  freshness: "fresh",
+  configured: true,
+  last_sync_at: "2026-09-06T10:00:00Z",
+  last_success_at: "2026-09-06T10:00:00Z",
+  last_attempt_at: "2026-09-06T10:00:00Z",
+  last_failure_at: null,
+  last_duration_ms: 120,
+  last_items_received: 10,
+  last_items_created: 2,
+  last_items_updated: 8,
+  last_error: null,
+  last_error_code: null,
+  last_error_at: null,
+  consecutive_failures: 0,
+  next_run_at: "2026-09-06T10:15:00Z",
+};
+
+const monitor: MarketMonitorData = {
+  mode: "live",
+  sync_enabled: true,
+  sync_query_configured: true,
+  scheduler_running: true,
+  platforms: [market],
+  metrics: {
+    total_listings: 20,
+    active_listings: 12,
+    price_observations: 240,
+    active_opportunities: 3,
+    sync_errors_24h: 0,
+  },
+  warnings: [],
+};
+
+describe("market monitor helpers", () => {
+  it("résume l'état système et les métriques principales", () => {
+    expect(monitorSummary(monitor)).toMatchObject({
+      scheduler: "Actif",
+      query: "Configurée",
+      listings: 12,
+      observations: 240,
+      opportunities: 3,
+      syncErrors24h: 0,
+    });
+  });
+
+  it("distingue les marchés non configurés, périmés, très périmés et démo", () => {
+    expect(marketOperationalLabel({ ...market, status: "not_configured" })).toBe("Option désactivée");
+    expect(marketOperationalLabel({ ...market, freshness: "stale" })).toBe("Données périmées");
+    expect(marketOperationalLabel({ ...market, freshness: "very_stale" })).toBe("Données très périmées");
+    expect(marketOperationalLabel({ ...market, status: "demo" })).toBe("Fixtures DEMO");
+  });
+
+  it("ne considère pas not_configured comme une panne bloquante", () => {
+    expect(
+      hasBlockingMarketFailure({
+        ...monitor,
+        platforms: [{ ...market, status: "not_configured" }],
+      }),
+    ).toBe(false);
+    expect(
+      hasBlockingMarketFailure({
+        ...monitor,
+        platforms: [{ ...market, status: "error" }],
+        metrics: { ...monitor.metrics, sync_errors_24h: 1 },
+      }),
+    ).toBe(true);
+  });
+});
