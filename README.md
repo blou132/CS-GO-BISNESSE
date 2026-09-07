@@ -16,13 +16,21 @@ Copy-Item .env.example .env
 ```
 
 Remplacez `replace-with-local-password` dans `.env` par un mot de passe local
-URL-safe, puis lancez :
+URL-safe. Générez ensuite le hash du mot de passe administrateur sans écrire
+le mot de passe brut dans le fichier :
+
+```powershell
+python scripts/generate-admin-password-hash.py
+```
+
+Placez la sortie entre quotes simples dans `ADMIN_PASSWORD_HASH`, puis
+renseignez un `SESSION_SECRET` aléatoire d'au moins 32 caractères. Lancez :
 
 ```powershell
 docker compose up --build
 ```
 
-Ouvrez <http://127.0.0.1:3000>. L'API est disponible sur
+Ouvrez <http://127.0.0.1:3000/login>. L'API est disponible sur
 <http://127.0.0.1:8000/docs>. Les ports écoutent uniquement sur la boucle
 locale et PostgreSQL n'est pas publié sur la machine hôte.
 
@@ -75,6 +83,12 @@ Toutes les variables sont décrites dans [.env.example](.env.example).
 | `FX_RATE_SOURCE` | Avec taux FX | Source explicite du taux |
 | `FX_RATE_TIMESTAMP` | Avec taux FX | Date ISO 8601 avec fuseau |
 | `API_BASE_URL` | Frontend | Adresse privée du backend |
+| `ADMIN_USERNAME` | Frontend | Identifiant de l'administrateur unique |
+| `ADMIN_PASSWORD_HASH` | Frontend | Hash Scrypt généré par le script du projet |
+| `SESSION_SECRET` | Frontend | Signature HMAC des sessions, 32 caractères minimum |
+| `SESSION_COOKIE_SECURE` | Frontend | Ajoute `Secure` au cookie lorsque l'accès utilise HTTPS |
+| `SESSION_TTL_SECONDS` | Facultative | Durée de session, 8 heures par défaut |
+| `LOGIN_RATE_LIMIT_*` | Facultative | Seuil et fenêtre de limitation des connexions |
 
 Sans taux USD/EUR complet, les montants USD gardent leur prix et devise
 originaux mais leur valeur EUR reste `null`. Un taux de référence ne devient
@@ -147,6 +161,11 @@ Marchés affiche ensuite l'état de chaque plateforme, la prochaine exécution,
 les compteurs de synchro et les métriques persistées. Voir
 [docs/MARKET_MONITORING.md](docs/MARKET_MONITORING.md).
 
+L'accès applicatif passe par `/login`. Toutes les pages et API métier sont
+protégées par une session signée, avec vérification supplémentaire dans les
+handlers API privés. `/api/health` reste public pour Docker et les contrôles
+d'exploitation. Le mot de passe brut n'est jamais stocké par l'application.
+
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
@@ -158,5 +177,5 @@ les compteurs de synchro et les métriques persistées. Voir
 - [Audit initial](docs/AUDIT.md)
 - [Intégrations officielles](docs/integrations/)
 
-L'application n'a pas encore d'authentification utilisateur. Elle est prévue
-pour un usage privé local et ne doit pas être exposée telle quelle sur Internet.
+L'authentification administrateur ne remplace pas TLS ni un contrôle d'accès
+réseau. L'application reste destinée à une exposition privée uniquement.

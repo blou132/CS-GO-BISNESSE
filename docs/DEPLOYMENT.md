@@ -45,6 +45,10 @@ Dans `.env.production`, définir au minimum :
 ```dotenv
 ENVIRONMENT=production
 POSTGRES_PASSWORD=un-secret-long-et-unique
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD_HASH='scrypt$...'
+SESSION_SECRET=un-secret-aleatoire-distinct-de-32-caracteres-minimum
+SESSION_COOKIE_SECURE=false
 APP_BIND_ADDRESS=127.0.0.1
 APP_PORT=3000
 CORS_ORIGINS=http://127.0.0.1:3000
@@ -58,6 +62,22 @@ déclarer l'application unhealthy. Ne jamais placer `.env.production` ou les
 dumps dans Git.
 Le mot de passe PostgreSQL entre dans une URL de connexion : utilisez seulement
 les lettres, chiffres et caractères `.` `_` `~` `-`, comme le vérifie le script.
+
+Générer le hash administrateur dans un terminal interactif :
+
+```bash
+./scripts/generate-admin-password-hash.py
+```
+
+Le script demande deux fois le mot de passe sans l'afficher et écrit uniquement
+le hash Scrypt. Copier cette sortie entre quotes simples dans
+`ADMIN_PASSWORD_HASH`. Ne placez jamais le mot de passe brut dans un fichier,
+une commande Docker, Git ou les logs. Générer séparément le secret de session,
+par exemple avec `openssl rand -hex 32`.
+
+Conserver `SESSION_COOKIE_SECURE=false` pour un accès HTTP direct sur la boucle
+locale ou le LAN. Le passer à `true` seulement lorsque le navigateur rejoint
+réellement l'application en HTTPS ; un cookie `Secure` n'est pas envoyé en HTTP.
 
 `APP_BIND_ADDRESS=127.0.0.1` est le réglage initial recommandé. Le choix d'une
 autre adresse et la protection du trafic doivent être décidés avec la
@@ -86,9 +106,10 @@ reste un agrégat et n'est jamais présenté comme annonce individuelle.
 
 ## Premier déploiement
 
-Le script vérifie Git et Compose, construit des images étiquetées avec le
-commit, démarre PostgreSQL, crée un dump, exécute une seule migration Alembic,
-démarre l'API et le frontend, puis contrôle l'endpoint système :
+Le script vérifie Git, les paramètres d'authentification et Compose, construit
+des images étiquetées avec le commit, démarre PostgreSQL, crée un dump, exécute
+une seule migration Alembic, démarre l'API et le frontend, puis contrôle
+l'endpoint système :
 
 ```bash
 cd /opt/cs2-arbitrage-hub
@@ -105,9 +126,17 @@ docker compose --env-file .env.production \
 curl --fail http://127.0.0.1:3000/api/health
 ```
 
-La réponse distingue le processus API, PostgreSQL et l'état observé des trois
-sources externes. Une marketplace en erreur ne rend pas l'API ou PostgreSQL
-unhealthy.
+La réponse distingue le processus API, PostgreSQL, l'authentification et l'état
+observé des trois sources externes. Une configuration d'authentification
+invalide rend le frontend unhealthy et bloque le déploiement. Une marketplace
+en erreur ne rend pas l'API ou PostgreSQL unhealthy.
+
+Ouvrir ensuite `http://127.0.0.1:3000/login`. Les pages, les API métier et les
+actions sont protégées ; seul `/login`, `/api/login` et `/api/health` restent
+publics. La session signée expire après `SESSION_TTL_SECONDS`, huit heures par
+défaut. Cinq échecs de connexion sur quinze minutes déclenchent par défaut une
+réponse HTTP 429. Ce compteur en mémoire convient à l'instance unique et repart
+à zéro au redémarrage du frontend.
 
 ## Mise à jour
 
@@ -228,6 +257,9 @@ code d'erreur. Il n'enregistre pas les clés API, mots de passe ou en-têtes
 d'autorisation. Docker utilise le pilote `json-file`, limité par défaut à cinq
 fichiers de 10 Mio par conteneur. Modifier `DOCKER_LOG_MAX_SIZE` et
 `DOCKER_LOG_MAX_FILES` dans `.env.production` si nécessaire.
+Le frontend journalise uniquement les événements d'authentification
+(`login_success`, `login_failed`, `login_rate_limited`, `logout`) sans mot de
+passe, hash ni jeton de session.
 
 ## Arrêt et redémarrage
 
@@ -311,6 +343,10 @@ donc être utilisée que lorsque le rollback du schéma l'exige.
 - **Le frontend ne répond pas** : vérifier `APP_BIND_ADDRESS`, `APP_PORT`,
   `docker compose ... ps web` et les logs. Aucun reverse proxy n'est installé
   par ce projet.
+- **La page de connexion répond 503** : vérifier la présence de
+  `ADMIN_USERNAME`, d'un hash produit par le script et d'un `SESSION_SECRET`
+  d'au moins 32 caractères. Ne jamais afficher leur valeur dans un ticket ou
+  un log.
 - **Le déploiement échoue après migration** : garder les conteneurs et le dump,
   lire les logs, puis choisir entre corriger la nouvelle version ou appliquer
   le rollback documenté. Ne supprimez pas le volume.
@@ -318,3 +354,10 @@ donc être utilisée que lorsque le rollback du schéma l'exige.
 Les scénarios de validation serveur, y compris persistance, sauvegarde,
 restauration contrôlée et redémarrage, sont détaillés dans
 [SERVER_VALIDATION.md](SERVER_VALIDATION.md).
+
+## Intégration future au Server Panel
+
+Une intégration ultérieure pourra afficher l'état de CS2 Arbitrage Hub et
+proposer start, stop, restart, logs et health via les scripts officiels. Elle
+devra rester séparée de l'authentification applicative et ne sera ajoutée
+qu'après stabilisation. Le présent déploiement ne modifie pas Server Panel.

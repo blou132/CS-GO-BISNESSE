@@ -1,113 +1,125 @@
-# Validation — 6 septembre 2026
+# Validation — 7 septembre 2026
 
 ## Environnement de contrôle
 
-- Linux, Python 3.12.3 ;
-- environnement Python temporaire : `/tmp/cs2-arbitrage-api-venv` ;
-- Docker 29.8.0 et Docker Compose 5.5.1 ;
-- image Node `node:24-alpine` utilisée en conteneur jetable pour le frontend ;
-- aucune clé CSFloat ou DMarket réelle ;
-- aucun démarrage applicatif persistant et aucun déploiement serveur.
+- hôte Linux `serve-projet` ;
+- Docker Engine 29.8.0 et Docker Compose 5.5.1 ;
+- Python 3.13 dans un conteneur jetable construit depuis `uv.lock` ;
+- Node 24 et Playwright 1.58.2 dans des conteneurs jetables ;
+- production permanente dans `/opt/cs2-arbitrage-hub` ;
+- aucune clé CSFloat ou DMarket ;
+- aucun changement UFW, Tailscale, DNS, DHCP, route, IP ou service tiers.
 
-Aucun secret réel n'a été utilisé. Les conteneurs existants du serveur n'ont
-pas été modifiés ou arrêtés.
+Au relevé final, la partition racine utilisait 60 Gio sur 937 Gio et 12 Gio
+de mémoire étaient disponibles sur 15 Gio. Le seul port hôte publié par le
+projet était `127.0.0.1:3000`.
 
 ## Backend
 
 | Contrôle | Résultat |
 | --- | --- |
-| `python3 -m compileall apps/api/app apps/api/tests` | Succès |
-| `ruff format --check .` depuis `apps/api` | 43 fichiers conformes |
-| `ruff check .` depuis `apps/api` | Succès |
-| `mypy app` depuis `apps/api` | Succès, 32 fichiers |
-| `pytest` depuis `apps/api` | 25 tests réussis |
+| `pytest` | 25 tests réussis, 2 avertissements de dépendances |
+| `ruff check .` | Succès |
+| `ruff format --check .` | 43 fichiers conformes |
+| `mypy app` | Succès, 32 fichiers |
 | Alembic `upgrade head` | Succès sur SQLite temporaire |
-| Alembic `downgrade -1` puis `upgrade head` | Succès |
 | Alembic `check` | Aucune opération manquante |
 
-Pytest signale deux avertissements de dépréciation issus de FastAPI/Starlette
-dans l'environnement de test. Aucun test n'est ignoré.
+La correction de monitoring vérifie désormais que les métriques live ne
+comptent aucune ligne DEMO. Les tests couvrent aussi les healthchecks, les
+adaptateurs, les erreurs de configuration, le scheduler, les verrous par
+marketplace, la persistance et la déduplication des observations.
 
-Les tests couvrent notamment :
-
-- séparation DEMO/LIVE ;
-- `/health/live`, `/health/ready`, `/health/status` ;
-- adaptateurs CSFloat, Skinport et DMarket sur fixtures ;
-- absence de requête sans clé CSFloat ;
-- signature DMarket sans fuite de secret ;
-- agrégats Skinport conservés comme `AGGREGATE` ;
-- absence de retry agressif après HTTP 429 ;
-- configuration du scheduler ;
-- verrou par marketplace ;
-- statuts `not_configured`, `stale` et `very_stale` ;
-- upsert de listings et déduplication d'observations identiques ;
-- persistance non destructive des listings ;
-- opportunités persistées après recalcul ;
-- validation des réglages `MARKET_SYNC_*`.
-
-## Frontend
-
-La machine n'avait ni `node` ni `npm` installés localement. Les validations ont
-donc été exécutées dans un conteneur jetable `node:24-alpine`, avec le dossier
-`apps/web` monté en lecture seule puis copié dans `/tmp/work` du conteneur.
+## Frontend et authentification
 
 | Contrôle | Résultat |
 | --- | --- |
-| `npm ci` | Succès, 0 vulnérabilité pendant l'installation |
-| `npm test` | 5 tests réussis |
+| `npm ci` | Succès |
+| `npm test` | 30 tests réussis |
 | `npm run lint` | Succès |
-| `npm run typecheck` | Succès, routes Next générées |
+| `npm run typecheck` | Succès |
+| `npm run build` | Succès, proxy Next.js 16 inclus |
 | `npm audit --audit-level=high` | 0 vulnérabilité connue |
 
-Le `docker compose build` a également exécuté `npm run build` dans le Dockerfile
-frontend. Next.js a compilé avec succès et a produit les routes :
+Les tests V0.10 couvrent login valide/invalide, configuration invalide,
+rotation d'identifiants contre le rate limit, session signée, expiration,
+cookie `HttpOnly`/`SameSite`/`Secure`, routes page et API protégées, contrôle
+serveur des API, origine des POST et logout.
 
-- `/` ;
-- `/scanner` ;
-- `/markets` ;
-- `/items/[id]` ;
-- `/api/dashboard` ;
-- `/api/health` ;
-- `/api/market-monitor` ;
-- `/api/sync` ;
-- `/api/items/[id]`.
+Une image `cs2-arbitrage-hub-web:auth-validation` a été lancée temporairement
+sur `127.0.0.1:3300`, reliée uniquement au réseau applicatif du projet. Le test
+Playwright a confirmé :
+
+- redirection anonyme de `/markets` vers `/login?next=/markets` ;
+- connexion administrateur et chargement de la page Marchés réelle ;
+- cookie `HttpOnly`, `SameSite=Lax`, expiration présente et `Secure=false`
+  dans ce scénario HTTP ;
+- déconnexion, suppression effective de la session et retour à `/login` ;
+- absence de débordement horizontal à 390 × 844 ;
+- absence d'erreur console ou erreur de page.
+
+Le conteneur de validation a ensuite été supprimé. Le test a permis de corriger
+deux problèmes avant livraison : une redirection logout construite depuis
+`0.0.0.0:3000` et le cas Chromium `Origin: null`/`Sec-Fetch-Site: same-origin`
+provoqué par la politique `no-referrer`.
 
 ## Docker et Compose
 
 | Contrôle | Résultat |
 | --- | --- |
-| `docker compose -f docker-compose.yml -f compose.production.yml config --quiet` avec mot de passe factice | Succès |
-| `docker compose ... build` avec `IMAGE_TAG=validation` | Succès |
+| `docker compose ... config --quiet` avec secrets factices | Succès |
+| build API `auth-validation` | Succès |
+| build frontend `auth-validation` | Succès |
+| frontend de validation en lecture seule | Succès |
+| healthcheck de validation avec auth | API, base et auth healthy |
 
-Le build a validé les deux images projet :
+La configuration de production ne publie ni PostgreSQL ni FastAPI. Les trois
+services ont `restart: unless-stopped`. Le healthcheck frontend appelle
+désormais `/api/health` et échoue si les paramètres d'authentification sont
+absents ou mal formés.
 
-- `cs2-arbitrage-hub-api:validation` ;
-- `cs2-arbitrage-hub-web:validation`.
+## Production réelle
 
-Il n'y a pas eu de `docker compose up`, pas de migration sur une base réelle,
-pas d'arrêt de service existant et pas de modification réseau hôte.
+Le premier déploiement permanent, la migration PostgreSQL, la persistance
+après `docker compose down` sans `-v`, le redémarrage API/frontend, la
+sauvegarde et une restauration contrôlée avec donnée témoin ont été exécutés
+avec succès. Quatre dumps validés étaient présents, avec permissions 600 ; le
+dernier était `cs2-20260907T114423Z-272992.dump` (37 330 octets).
 
-## Scripts
+L'état permanent conservé pendant la préparation V0.10 est le commit
+`378b6f0494a042d434e42acd8b2dc014413eecb6`, avec API, frontend et PostgreSQL
+healthy. La V0.10 n'a pas remplacé ce frontend : aucun mot de passe
+administrateur de production n'a été fourni et le projet interdit de stocker
+un mot de passe brut ou de fabriquer un identifiant inutilisable.
+Le nouveau préflight a été exécuté contre cette configuration : il s'est arrêté
+sur `ADMIN_USERNAME est absent ou vide` avant Compose, backup, build ou restart,
+comme attendu.
 
-Le script `scripts/deploy.sh` ne lance plus `git pull --ff-only`. Le workflow
-attendu est désormais :
+## Monitoring live
 
-1. l'administrateur choisit le commit avec Git ;
-2. le dépôt doit être propre ;
-3. `./scripts/deploy.sh` construit et déploie exactement ce commit local.
+Le scheduler 24/7 est actif avec un intervalle de 900 secondes. Au relevé du
+7 septembre 2026 à 16:25 UTC :
 
-La validation complète de `backup-db.sh`, `restore-db.sh`, du redémarrage après
-reboot et de la restauration contrôlée doit être faite sur le serveur de
-production avec la base réelle, selon `SERVER_VALIDATION.md`.
+- Skinport : `online`, 2 agrégats reçus, durée 1 072 ms ;
+- CSFloat : `not_configured`, clé absente ;
+- DMarket : `not_configured`, clés absentes ;
+- métriques live : 0 listing, 40 observations de prix, 0 opportunité ;
+- prochaine exécution annoncée : 16:40 UTC.
 
-## Intégrations live
+Skinport reste explicitement traité comme agrégat de prix et non comme annonce
+individuelle. Les absences de clés restent informatives et ne rendent pas
+PostgreSQL ou l'API unhealthy.
 
-Les appels live aux marketplaces n'ont pas été rejoués pendant cette passe.
+## Git et limite restante
 
-- CSFloat : clé absente, état attendu `not_configured`.
-- DMarket : clés absentes, état attendu `not_configured`.
-- Skinport : endpoint public disponible dans le code, données conservées comme
-  agrégats uniquement.
+Le dépôt de travail est sur `feat/mvp-foundations`. Le remote GitHub reste en
+HTTPS ; `gh` n'est pas installé et la clé SSH présente n'est pas autorisée par
+GitHub. Aucun credential n'a été fabriqué et aucun force-push n'a été tenté.
 
-Une marketplace non configurée, en erreur ou limitée par quota ne rend pas
-`/health/ready` unhealthy.
+Pour activer la V0.10 en production, l'administrateur doit choisir son mot de
+passe directement dans un terminal avec
+`./scripts/generate-admin-password-hash.py`, puis placer uniquement le hash
+entre quotes simples dans `.env.production`. Le `SESSION_SECRET` peut être
+généré automatiquement côté serveur sans exposer sa valeur. Une fois ce choix
+humain effectué, `./scripts/deploy.sh` réalisera la sauvegarde, le build, la
+migration, les healthchecks et le remplacement contrôlé du frontend.

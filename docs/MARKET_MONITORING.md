@@ -98,8 +98,9 @@ La page `/markets` est le Market Monitor en lecture seule. Elle affiche :
 - dernière tentative, dernier succès, prochaine exécution et compteurs par
   plateforme.
 
-Aucun bouton dangereux de type “run sync global” n'a été ajouté à cette page,
-car l'application n'a pas encore d'authentification utilisateur.
+Aucun bouton dangereux de type “run sync global” n'est ajouté à cette page.
+L'authentification administrateur protège l'accès, mais ne transforme pas une
+collecte large ou agressive en opération sûre.
 
 ## Limites connues
 
