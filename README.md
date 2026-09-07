@@ -63,6 +63,11 @@ Toutes les variables sont décrites dans [.env.example](.env.example).
 | --- | --- | --- |
 | `POSTGRES_PASSWORD` | Docker | Mot de passe PostgreSQL local |
 | `DATABASE_URL` | Hors Compose | Connexion SQLAlchemy PostgreSQL |
+| `MARKET_SYNC_ENABLED` | Facultative | Active le monitoring périodique quand `true` |
+| `MARKET_SYNC_QUERY` | Avec monitoring | Nom de skin collecté en continu |
+| `CSFLOAT_SYNC_INTERVAL_SECONDS` | Facultative | Intervalle du scheduler CSFloat |
+| `SKINPORT_SYNC_INTERVAL_SECONDS` | Facultative | Intervalle du scheduler Skinport |
+| `DMARKET_SYNC_INTERVAL_SECONDS` | Facultative | Intervalle du scheduler DMarket |
 | `CSFLOAT_API_KEY` | CSFloat live | Clé API transmise côté serveur |
 | `DMARKET_PUBLIC_KEY` | DMarket | Clé publique Ed25519 |
 | `DMARKET_SECRET_KEY` | DMarket | Clé privée Ed25519, serveur uniquement |
@@ -122,7 +127,11 @@ ajoute l'exécution production, les réseaux isolés, le durcissement des
 conteneurs, les logs bornés et un port frontend configurable. La configuration
 se trouve dans `.env.production`, ignoré par Git.
 
-Sur le serveur, après avoir copié et renseigné `.env.production` :
+Sur le serveur, l'administrateur met d'abord le dépôt à jour avec Git, puis le
+script déploie exactement le commit présent localement. Il ne fait pas de
+`git pull` automatique.
+
+Après avoir copié et renseigné `.env.production` :
 
 ```bash
 ./scripts/deploy.sh
@@ -132,10 +141,18 @@ La procédure complète, les migrations uniques, les sauvegardes, la
 restauration et le rollback sont décrits dans
 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
+Le monitoring continu est désactivé par défaut. Pour l'activer, définir
+`MARKET_SYNC_ENABLED=true` et `MARKET_SYNC_QUERY` côté serveur. L'écran
+Marchés affiche ensuite l'état de chaque plateforme, la prochaine exécution,
+les compteurs de synchro et les métriques persistées. Voir
+[docs/MARKET_MONITORING.md](docs/MARKET_MONITORING.md).
+
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Déploiement Linux](docs/DEPLOYMENT.md)
+- [Validation serveur](docs/SERVER_VALIDATION.md)
+- [Monitoring marché 24/7](docs/MARKET_MONITORING.md)
 - [Modèle de données](docs/DATA_MODEL.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Audit initial](docs/AUDIT.md)

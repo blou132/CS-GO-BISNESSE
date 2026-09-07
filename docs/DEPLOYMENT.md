@@ -53,8 +53,9 @@ BACKUP_RETENTION_DAYS=14
 ```
 
 Ajouter les clés CSFloat et DMarket seulement si elles sont disponibles.
-Elles restent vides sinon ; l'interface indiquera l'indisponibilité réelle de
-ces sources. Ne jamais placer `.env.production` ou les dumps dans Git.
+Elles restent vides sinon ; l'interface indiquera `not_configured` sans
+déclarer l'application unhealthy. Ne jamais placer `.env.production` ou les
+dumps dans Git.
 Le mot de passe PostgreSQL entre dans une URL de connexion : utilisez seulement
 les lettres, chiffres et caractères `.` `_` `~` `-`, comme le vérifie le script.
 
@@ -68,6 +69,20 @@ La commande Compose de production utilisée dans toute cette page est :
 docker compose --env-file .env.production \
   -f docker-compose.yml -f compose.production.yml
 ```
+
+Le monitoring 24/7 est volontairement inactif par défaut. Pour collecter un
+skin en continu, renseigner explicitement :
+
+```dotenv
+MARKET_SYNC_ENABLED=true
+MARKET_SYNC_QUERY="AK-47 | Redline (Field-Tested)"
+CSFLOAT_SYNC_INTERVAL_SECONDS=900
+SKINPORT_SYNC_INTERVAL_SECONDS=900
+DMARKET_SYNC_INTERVAL_SECONDS=900
+```
+
+Sans clés personnelles, CSFloat et DMarket restent `not_configured`. Skinport
+reste un agrégat et n'est jamais présenté comme annonce individuelle.
 
 ## Premier déploiement
 
@@ -96,26 +111,30 @@ unhealthy.
 
 ## Mise à jour
 
-Depuis une copie propre de la branche :
+Depuis une copie propre de la branche, récupérer d'abord le code voulu :
 
 ```bash
 cd /opt/cs2-arbitrage-hub
+git fetch origin
+git switch feat/mvp-foundations
+git pull --ff-only
+git status --short
 ./scripts/deploy.sh
 ```
 
 Le script suit cet ordre :
 
-1. `git pull --ff-only` ;
+1. refus d'un dépôt modifié ou non propre ;
 2. validation de la configuration Compose ;
-3. construction des images du commit ;
+3. construction des images du commit local courant ;
 4. attente de PostgreSQL et sauvegarde ;
 5. migration Alembic dans un conteneur ponctuel unique ;
 6. recréation des services persistants et attente de leurs healthchecks ;
 7. requête HTTP sur `HEALTHCHECK_URL`.
 
 Il s'arrête au premier échec. Il n'effectue ni reset Git, ni push, ni
-suppression de volume, ni modification du réseau de l'hôte. En cas d'échec
-après une migration, examiner l'état avant toute restauration.
+pull Git, ni suppression de volume, ni modification du réseau de l'hôte. En
+cas d'échec après une migration, examiner l'état avant toute restauration.
 Un verrou `flock` empêche deux déploiements ou restaurations lancés depuis la
 même copie du dépôt de s'exécuter en parallèle.
 
@@ -203,8 +222,9 @@ docker compose --env-file .env.production \
 ```
 
 Le backend écrit des événements JSON avec timestamp, niveau, composant,
-message et, lorsque pertinent, marketplace, route, statut, durée et code
-d'erreur. Il n'enregistre pas les clés API, mots de passe ou en-têtes
+message et, lorsque pertinent, marketplace, route, événement
+`sync_started`/`sync_completed`/`sync_failed`, statut, durée, compteurs et
+code d'erreur. Il n'enregistre pas les clés API, mots de passe ou en-têtes
 d'autorisation. Docker utilise le pilote `json-file`, limité par défaut à cinq
 fichiers de 10 Mio par conteneur. Modifier `DOCKER_LOG_MAX_SIZE` et
 `DOCKER_LOG_MAX_FILES` dans `.env.production` si nécessaire.
@@ -284,9 +304,17 @@ donc être utilisée que lorsque le rollback du schéma l'exige.
 - **Une marketplace est indisponible** : consulter `/api/health` et la page
   Marchés. L'heure du dernier essai, le dernier succès et la dernière erreur
   viennent de la base. Vérifier ensuite la clé concernée et l'accès sortant.
+- **Le monitoring 24/7 ne collecte rien** : vérifier `MARKET_SYNC_ENABLED`,
+  `MARKET_SYNC_QUERY`, la page Marchés, puis les logs `market_sync`. Une
+  plateforme non configurée reste informative ; une erreur réseau est visible
+  dans `last_error_code`.
 - **Le frontend ne répond pas** : vérifier `APP_BIND_ADDRESS`, `APP_PORT`,
   `docker compose ... ps web` et les logs. Aucun reverse proxy n'est installé
   par ce projet.
 - **Le déploiement échoue après migration** : garder les conteneurs et le dump,
   lire les logs, puis choisir entre corriger la nouvelle version ou appliquer
   le rollback documenté. Ne supprimez pas le volume.
+
+Les scénarios de validation serveur, y compris persistance, sauvegarde,
+restauration contrôlée et redémarrage, sont détaillés dans
+[SERVER_VALIDATION.md](SERVER_VALIDATION.md).

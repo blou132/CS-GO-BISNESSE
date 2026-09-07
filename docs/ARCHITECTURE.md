@@ -17,6 +17,7 @@ flowchart LR
   M --> C[CSFloat]
   M --> S[Skinport : agrégats]
   M --> D[DMarket]
+  A --> Q[Scheduler optionnel]
   A --> P[Calculs Decimal et analyse]
 ```
 
@@ -45,11 +46,27 @@ TTL et les tentatives sont bornées. Une indisponibilité d'un fournisseur
 ne doit pas effacer ses dernières données connues ni empêcher l'affichage
 des autres fournisseurs. L'âge et les erreurs restent visibles.
 
+Le monitoring continu ajoute un scheduler `asyncio` simple dans le processus
+API. Il est désactivé par défaut par `MARKET_SYNC_ENABLED=false`, lit une
+requête serveur `MARKET_SYNC_QUERY`, applique un intervalle par plateforme et
+utilise un verrou local par marketplace pour empêcher deux collectes
+concurrentes du même fournisseur. L'API de production reste volontairement à
+un seul worker ; avant plusieurs workers, il faudra déplacer ces verrous et
+quotas dans une coordination partagée.
+
 La démo exige une action explicite et possède une provenance distincte
 dans le stockage. Il n'existe aucun repli automatique du réel vers la démo.
 Les agrégats Skinport ne deviennent jamais des listings identifiant un skin
 individuel. Les types LISTING, SALE, BUY_ORDER, TRADE_VALUE et AGGREGATE
 restent distincts dans le modèle conceptuel.
+
+Les listings sont upsertés par `mode + platform + external_id`. Un listing
+revu redevient `ACTIVE`; les lignes plus anciennes ne sont pas supprimées
+pour inventer un état `SOLD`. Les observations de prix conservent plateforme,
+objet, prix/devise, référence EUR facultative, type et timestamp. Une fenêtre
+de déduplication limite les observations `LISTING` identiques trop rapprochées.
+Après une synchronisation réussie, les opportunités calculables sont
+recalculées et persistées.
 
 Les endpoints sont en lecture/analyse : la synchronisation écrit des
 observations dans notre base mais n'achète rien sur les marketplaces.
@@ -91,6 +108,9 @@ afin qu'une seule migration soit active.
 connexion PostgreSQL et `/health/status` rapporte séparément l'API, la base et
 les derniers états persistés de CSFloat, Skinport et DMarket. L'indisponibilité
 d'une source externe reste visible sans provoquer le redémarrage de l'API.
+`/api/market-monitor` ajoute les compteurs opérationnels destinés à la page
+Marchés : prochaine exécution, dernière tentative, dernier succès, durée,
+créés/mis à jour, erreurs 24 h, listings actifs et opportunités actives.
 
 Le volume nommé `postgres_data` persiste les données. Les dumps custom créés
 par `scripts/backup-db.sh` forment une seconde couche de récupération, avec

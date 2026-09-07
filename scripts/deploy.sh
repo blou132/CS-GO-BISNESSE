@@ -29,7 +29,6 @@ wait_seconds="$(setting_value DEPLOY_WAIT_SECONDS "$env_file" '120')"
 validate_positive_integer "$wait_seconds" "DEPLOY_WAIT_SECONDS"
 health_url="$(setting_value HEALTHCHECK_URL "$env_file" 'http://127.0.0.1:3000/api/health')"
 
-git pull --ff-only
 export IMAGE_TAG
 IMAGE_TAG="$(git rev-parse --short=12 HEAD)"
 compose=(

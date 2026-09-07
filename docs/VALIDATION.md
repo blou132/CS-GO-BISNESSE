@@ -2,83 +2,112 @@
 
 ## Environnement de contrôle
 
-- Windows, Python 3.13.7 et uv 0.12.10 ;
-- Node.js 26.8.1 et npm 11.19.0 ;
-- PostgreSQL 17.11 local temporaire, limité à `127.0.0.1:55432` ;
-- Docker Compose 5.5.1 pour la validation statique des manifestes ;
-- Chromium piloté par agent-browser 0.36.0 pour le contrôle visuel.
+- Linux, Python 3.12.3 ;
+- environnement Python temporaire : `/tmp/cs2-arbitrage-api-venv` ;
+- Docker 29.8.0 et Docker Compose 5.5.1 ;
+- image Node `node:24-alpine` utilisée en conteneur jetable pour le frontend ;
+- aucune clé CSFloat ou DMarket réelle ;
+- aucun démarrage applicatif persistant et aucun déploiement serveur.
 
-Les outils, données et captures temporaires sont dans `.tools/` ou
-`artifacts/`, ignorés par Git. Aucun secret réel n'a été utilisé.
+Aucun secret réel n'a été utilisé. Les conteneurs existants du serveur n'ont
+pas été modifiés ou arrêtés.
 
 ## Backend
 
 | Contrôle | Résultat |
 | --- | --- |
-| `ruff check apps/api` | Succès |
-| `ruff format --check apps/api` | 38 fichiers conformes |
-| `mypy apps/api/app` | Succès, 30 fichiers |
-| `pytest apps/api/tests -q` | 18 tests réussis |
-| Alembic `upgrade`, `downgrade` puis `upgrade head` | Succès sur PostgreSQL 17.11 |
-| Alembic `current` | `7d9e1c84b2f0 (head)` |
+| `python3 -m compileall apps/api/app apps/api/tests` | Succès |
+| `ruff format --check .` depuis `apps/api` | 43 fichiers conformes |
+| `ruff check .` depuis `apps/api` | Succès |
+| `mypy app` depuis `apps/api` | Succès, 32 fichiers |
+| `pytest` depuis `apps/api` | 25 tests réussis |
+| Alembic `upgrade head` | Succès sur SQLite temporaire |
+| Alembic `downgrade -1` puis `upgrade head` | Succès |
 | Alembic `check` | Aucune opération manquante |
-| Conservation pendant la migration | 16 objets, 16 annonces, 138 observations et 6 états conservés |
-| `/health/live` | Processus API en HTTP 200 |
-| `/health/ready` | PostgreSQL joignable en HTTP 200 ; test dédié en HTTP 503 lors d'une panne simulée |
-| `/health/status` | API, base et trois marketplaces séparées, sans clé ou secret |
 
-Pytest signale deux avertissements de dépréciation provenant de FastAPI/
-Starlette et de leurs dépendances de test. Ils ne concernent pas le code du
-projet et aucun test n'est ignoré.
+Pytest signale deux avertissements de dépréciation issus de FastAPI/Starlette
+dans l'environnement de test. Aucun test n'est ignoré.
+
+Les tests couvrent notamment :
+
+- séparation DEMO/LIVE ;
+- `/health/live`, `/health/ready`, `/health/status` ;
+- adaptateurs CSFloat, Skinport et DMarket sur fixtures ;
+- absence de requête sans clé CSFloat ;
+- signature DMarket sans fuite de secret ;
+- agrégats Skinport conservés comme `AGGREGATE` ;
+- absence de retry agressif après HTTP 429 ;
+- configuration du scheduler ;
+- verrou par marketplace ;
+- statuts `not_configured`, `stale` et `very_stale` ;
+- upsert de listings et déduplication d'observations identiques ;
+- persistance non destructive des listings ;
+- opportunités persistées après recalcul ;
+- validation des réglages `MARKET_SYNC_*`.
 
 ## Frontend
 
+La machine n'avait ni `node` ni `npm` installés localement. Les validations ont
+donc été exécutées dans un conteneur jetable `node:24-alpine`, avec le dossier
+`apps/web` monté en lecture seule puis copié dans `/tmp/work` du conteneur.
+
 | Contrôle | Résultat |
 | --- | --- |
-| `npm test` | 2 tests réussis |
+| `npm ci` | Succès, 0 vulnérabilité pendant l'installation |
+| `npm test` | 5 tests réussis |
 | `npm run lint` | Succès |
-| `npm run typecheck` | Succès, routes Next.js générées |
-| `npm run build` | Succès, 9 routes produites dont `/api/health` |
-| Serveur standalone de production | HTML, CSS et JavaScript en HTTP 200 |
+| `npm run typecheck` | Succès, routes Next générées |
 | `npm audit --audit-level=high` | 0 vulnérabilité connue |
 
-La vérification navigateur a couvert la page Marchés en desktop et à 390 px.
-Elle confirme l'affichage réel de l'API, de PostgreSQL, des états externes, du
-dernier essai, du dernier succès et de la dernière erreur. Le passage explicite
-en mode DEMO conserve son avertissement et ses données isolées. Aucune erreur
-navigateur n'a été relevée.
+Le `docker compose build` a également exécuté `npm run build` dans le Dockerfile
+frontend. Next.js a compilé avec succès et a produit les routes :
 
-## Infrastructure et scripts
+- `/` ;
+- `/scanner` ;
+- `/markets` ;
+- `/items/[id]` ;
+- `/api/dashboard` ;
+- `/api/health` ;
+- `/api/market-monitor` ;
+- `/api/sync` ;
+- `/api/items/[id]`.
+
+## Docker et Compose
 
 | Contrôle | Résultat |
 | --- | --- |
-| Compose développement `config --quiet` | Succès |
-| Compose développement + production `config --quiet` | Succès |
-| Modèle Compose production JSON | Réseaux, ports, volume, dépendances, commandes et durcissement conformes |
-| `bash -n` sur les scripts | Succès |
-| `scripts/tests/backup-common-test.sh` | Succès |
-| `git diff --check` | Succès |
+| `docker compose -f docker-compose.yml -f compose.production.yml config --quiet` avec mot de passe factice | Succès |
+| `docker compose ... build` avec `IMAGE_TAG=validation` | Succès |
 
-Le test du modèle fusionné confirme notamment que PostgreSQL et FastAPI ne
-publient aucun port, que le frontend écoute sur `127.0.0.1:3000`, que le réseau
-PostgreSQL est interne, que le volume nommé est conservé et que la commande API
-production ne lance ni Alembic ni reload.
+Le build a validé les deux images projet :
 
-Le moteur Docker n'est pas installé sur cette machine. Les images n'ont donc
-pas été construites ni démarrées dans des conteneurs ici. `pg_dump`,
-`pg_restore`, les healthchecks Docker, le système de fichiers en lecture seule,
-la rotation `json-file` et le script de déploiement complet restent à valider
-sur la machine Linux disposant de Docker Engine.
+- `cs2-arbitrage-hub-api:validation` ;
+- `cs2-arbitrage-hub-web:validation`.
+
+Il n'y a pas eu de `docker compose up`, pas de migration sur une base réelle,
+pas d'arrêt de service existant et pas de modification réseau hôte.
+
+## Scripts
+
+Le script `scripts/deploy.sh` ne lance plus `git pull --ff-only`. Le workflow
+attendu est désormais :
+
+1. l'administrateur choisit le commit avec Git ;
+2. le dépôt doit être propre ;
+3. `./scripts/deploy.sh` construit et déploie exactement ce commit local.
+
+La validation complète de `backup-db.sh`, `restore-db.sh`, du redémarrage après
+reboot et de la restauration contrôlée doit être faite sur le serveur de
+production avec la base réelle, selon `SERVER_VALIDATION.md`.
 
 ## Intégrations live
 
-Les appels live du 5 septembre n'ont pas été rejoués pendant cette passe :
+Les appels live aux marketplaces n'ont pas été rejoués pendant cette passe.
 
-- Skinport avait répondu en HTTP 200 via son endpoint officiel et son agrégat
-  avait été stocké comme `AGGREGATE` ;
-- CSFloat exige une clé absente de l'environnement de contrôle ;
-- DMarket reste validé par fixtures signées, sans appel personnel faute de
-  clés.
+- CSFloat : clé absente, état attendu `not_configured`.
+- DMarket : clés absentes, état attendu `not_configured`.
+- Skinport : endpoint public disponible dans le code, données conservées comme
+  agrégats uniquement.
 
-L'endpoint système a exposé ces limites comme `unavailable` ou `stale`, sans
-les convertir en état ONLINE et sans rendre l'application unhealthy.
+Une marketplace non configurée, en erreur ou limitée par quota ne rend pas
+`/health/ready` unhealthy.

@@ -28,9 +28,13 @@ jamais automatiquement le prix du sticker non appliqué comme premium.
 
 Une annonce conserve plateforme, identifiant externe, objet, prix/devise
 originaux, montant EUR de référence facultatif, taux/source/date FX, URL,
-dates de publication et d'observation, et avertissements. `raw_payload` n'est
-pas stocké dans le MVP : cela réduit la rétention de champs inutiles ou
-sensibles. Les fixtures HTTP restent dans les tests lorsqu'elles sont utiles.
+dates de publication et d'observation, dernière vue, statut et avertissements.
+Les statuts sont `ACTIVE`, `INACTIVE`, `SOLD` et `UNKNOWN`. Le MVP ne déduit
+pas `SOLD` lors d'une disparition : une annonce excédentaire ou ancienne peut
+être marquée `INACTIVE`, mais l'objet et l'historique restent conservés.
+`raw_payload` n'est pas stocké dans le MVP : cela réduit la rétention de champs
+inutiles ou sensibles. Les fixtures HTTP restent dans les tests lorsqu'elles
+sont utiles.
 
 ### `price_observations`
 
@@ -38,15 +42,27 @@ Une observation associe nom de marché, plateforme, prix/devise originaux,
 conversion EUR facultative, nature et horodatage. Les types persistables sont
 `LISTING`, `SALE`, `BUY_ORDER`, `TRADE_VALUE` et `AGGREGATE`. Un fingerprint
 évite de réinsérer la même observation collectée. Un agrégat ne devient pas
-une vente ni un listing individuel.
+une vente ni un listing individuel. Les observations `LISTING` de même prix,
+plateforme et objet sont aussi dédupliquées sur une fenêtre configurable afin
+d'éviter une croissance inutile pendant le monitoring continu.
 
 ### `market_sync_states`
 
-Dernier essai et dernier succès par plateforme et mode. Une erreur met à jour
-l'essai et le message, mais ne modifie pas la date du dernier succès ni les
-données déjà conservées. `last_error` et `last_error_at` restent donc
-consultables après une reprise réussie : l'état courant et l'historique du
-dernier incident sont exposés séparément par l'endpoint système.
+Dernier essai, dernier succès, dernier échec, durée, compteurs reçus/créés/mis
+à jour, code/message d'erreur, nombre d'échecs consécutifs et prochaine
+exécution par plateforme et mode. Une erreur met à jour l'essai et le message,
+mais ne modifie pas la date du dernier succès ni les données déjà conservées.
+`last_error` et `last_error_at` restent donc consultables après une reprise
+réussie : l'état courant et l'historique du dernier incident sont exposés
+séparément par l'endpoint système et le Market Monitor.
+
+### `market_opportunities`
+
+Instantané persistant des opportunités calculables : listing, plateforme,
+nom de marché, statut actif/inactif, score, valeur estimée, profit potentiel,
+ROI, raison, date de détection et dernière vue. Les opportunités sont
+recalculées après une synchronisation réussie. En live, elles restent absentes
+tant que les ventes/frais nécessaires au calcul ne sont pas disponibles.
 
 ### `pattern_rules`
 
@@ -84,8 +100,9 @@ Le score d'opportunité initial n'est calculé que pour la démo, où les ventes
 et 10 % de frais de vente sont explicitement synthétiques. Pondération
 centralisée : écart 30 %, liquidité 20 %, historique 20 %, float 15 %,
 confiance marché 10 %, risque 5 %. Les pondérations vivent dans un objet
-immuable remplaçable et le calcul possède un test dédié. En live, profit, ROI et score restent
-inconnus tant que les frais effectifs et la route de revente ne le sont pas.
+immuable remplaçable et le calcul possède un test dédié. En live, profit, ROI
+et score restent inconnus tant que les frais effectifs et la route de revente
+ne le sont pas.
 
 ## Concepts futurs non persistés
 
