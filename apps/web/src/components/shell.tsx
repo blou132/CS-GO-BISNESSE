@@ -27,7 +27,7 @@ function ShellContent({ children }: { children: React.ReactNode }) {
       <div className="sidebar-bottom"><span className="avatar">ME</span><div>Espace local<small>CS2 Arbitrage Hub</small></div><span className="version">MVP</span></div>
     </aside>
     <div className="main-shell">
-      <header className="topbar"><div className="breadcrumb">Espace de travail <span>/</span> <strong>{active?.title ?? "Détail de l’objet"}</strong></div><div className="topbar-actions"><span className={`mode-badge ${mode}`}><i />{mode === "demo" ? "DEMO" : "LIVE"}</span><span className="currency-badge">EUR <span>devise de référence</span></span><button className="button button-small button-ghost" onClick={switchMode} disabled={loading}>{mode === "demo" ? "Passer en live" : "Charger la démo"}</button></div></header>
+      <header className="topbar"><div className="breadcrumb">Espace de travail <span>/</span> <strong>{active?.title ?? "Détail de l’objet"}</strong></div><div className="topbar-actions"><span className={`mode-badge ${mode}`}><i />{mode === "demo" ? "DEMO" : "LIVE"}</span><span className="currency-badge">EUR <span>devise de référence</span></span><button className="button button-small button-ghost" onClick={switchMode} disabled={loading}>{mode === "demo" ? "Passer en live" : "Charger la démo"}</button><form action="/logout" method="post"><button className="icon-button" type="submit" title="Se déconnecter" aria-label="Se déconnecter"><Icon name="logout" /></button></form></div></header>
       <main id="main-content" className="main-content">
         {mode === "demo" ? <div className="notice demo-notice" role="status"><Icon name="info" /><span><strong>Environnement de démonstration.</strong> Tous les prix et objets affichés sont des fixtures de test, sans valeur de marché réelle.</span></div> : null}
         {error ? <div className="notice error-notice" role="alert"><Icon name="warning" /><span><strong>Connexion interrompue.</strong> {error}{data ? " Les dernières observations restent affichées et peuvent être périmées." : ""}</span><button className="text-button" onClick={refresh} disabled={loading}>Réessayer</button></div> : null}
@@ -39,4 +39,8 @@ function ShellContent({ children }: { children: React.ReactNode }) {
   </div>;
 }
 
-export function Shell({ children }: { children: React.ReactNode }) { return <MarketProvider><ShellContent>{children}</ShellContent></MarketProvider>; }
+export function Shell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  if (pathname === "/login") return children;
+  return <MarketProvider><ShellContent>{children}</ShellContent></MarketProvider>;
+}

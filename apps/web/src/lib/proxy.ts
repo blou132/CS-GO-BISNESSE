@@ -1,8 +1,17 @@
 import "server-only";
 
+import { readAuthConfig } from "./auth-config";
+
 const apiBaseUrl = () => process.env.API_BASE_URL ?? "http://127.0.0.1:8000";
 
 export async function proxyHealth() {
+  const auth = readAuthConfig();
+  if (!auth.ok) {
+    return Response.json(
+      { api: "unknown", database: "unknown", authentication: "unhealthy" },
+      { status: 503, headers: { "Cache-Control": "no-store" } },
+    );
+  }
   try {
     const upstream = await fetch(new URL("/health/status", apiBaseUrl()), {
       cache: "no-store",
@@ -12,8 +21,11 @@ export async function proxyHealth() {
     if (!upstream.ok) {
       return Response.json({ detail: "État système indisponible." }, { status: 502 });
     }
-    const body: unknown = await upstream.json();
-    return Response.json(body, { headers: { "Cache-Control": "no-store" } });
+    const body = (await upstream.json()) as Record<string, unknown>;
+    return Response.json(
+      { ...body, authentication: "healthy" },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch {
     return Response.json({ detail: "API indisponible." }, { status: 503 });
   }

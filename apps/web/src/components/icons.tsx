@@ -18,6 +18,8 @@ const paths = {
   check: "m5 12 4 4L19 6",
   activity: "M2 12h4l3-8 6 16 3-8h4",
   shield: "m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3m-4 9 3 3 5-6",
+  lock: "M7 11V8a5 5 0 0 1 10 0v3M6 11h12v10H6z",
+  logout: "M10 17l5-5-5-5M15 12H3M15 5h4a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-4",
 } as const;
 
 export type IconName = keyof typeof paths;
