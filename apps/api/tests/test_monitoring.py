@@ -126,16 +126,24 @@ async def test_scheduler_is_optional_and_records_next_run(tmp_path) -> None:
     engine.dispose()
 
 
-def test_demo_sync_persists_opportunities_and_monitor_metrics(tmp_path) -> None:
+def test_market_monitor_metrics_do_not_count_demo_rows(tmp_path) -> None:
     settings, engine, factory = _factory(tmp_path)
     with factory() as session:
         ensure_demo(session, settings)
-        active_opportunities = list(
-            session.scalars(select(MarketOpportunity).where(MarketOpportunity.status == "ACTIVE"))
+        active_demo_opportunities = list(
+            session.scalars(
+                select(MarketOpportunity).where(
+                    MarketOpportunity.mode == "demo",
+                    MarketOpportunity.status == "ACTIVE",
+                )
+            )
         )
         monitor = build_market_monitor(session, settings)
 
-    assert active_opportunities
-    assert monitor.metrics.active_opportunities == len(active_opportunities)
+    assert active_demo_opportunities
+    assert monitor.metrics.total_listings == 0
+    assert monitor.metrics.active_listings == 0
+    assert monitor.metrics.price_observations == 0
+    assert monitor.metrics.active_opportunities == 0
     assert monitor.sync_enabled is False
     engine.dispose()

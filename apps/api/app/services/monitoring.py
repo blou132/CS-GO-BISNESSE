@@ -36,26 +36,34 @@ def build_market_monitor(
         sync_query_configured=bool(settings.market_sync_query.strip()),
         scheduler_running=scheduler_running,
         platforms=statuses,
-        metrics=_metrics(session),
+        metrics=_metrics(session, "live"),
         warnings=warnings,
     )
 
 
-def _metrics(session: Session) -> MarketMetrics:
+def _metrics(session: Session, mode: str) -> MarketMetrics:
     now = datetime.now(UTC)
     day_ago = now - timedelta(hours=24)
     return MarketMetrics(
-        total_listings=_count(session, select(func.count()).select_from(MarketListing)),
+        total_listings=_count(
+            session,
+            select(func.count()).select_from(MarketListing).where(MarketListing.mode == mode),
+        ),
         active_listings=_count(
             session,
-            select(func.count()).select_from(MarketListing).where(MarketListing.status == "ACTIVE"),
+            select(func.count())
+            .select_from(MarketListing)
+            .where(MarketListing.mode == mode, MarketListing.status == "ACTIVE"),
         ),
-        price_observations=_count(session, select(func.count()).select_from(PriceObservation)),
+        price_observations=_count(
+            session,
+            select(func.count()).select_from(PriceObservation).where(PriceObservation.mode == mode),
+        ),
         active_opportunities=_count(
             session,
             select(func.count())
             .select_from(MarketOpportunity)
-            .where(MarketOpportunity.status == "ACTIVE"),
+            .where(MarketOpportunity.mode == mode, MarketOpportunity.status == "ACTIVE"),
         ),
         sync_errors_24h=_count(
             session,
