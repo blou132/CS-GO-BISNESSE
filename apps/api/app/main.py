@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from typing import Annotated, cast
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, status
@@ -11,9 +12,11 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.db.session import build_engine, build_session_factory
+from app.markets.registry import source_catalog
 from app.pricing.finance import ProfitInput, calculate_profit
 from app.schemas.api import (
     Dashboard,
+    IntegrationCatalog,
     ItemDetail,
     MarketMonitor,
     Mode,
@@ -21,7 +24,7 @@ from app.schemas.api import (
     ProfitResponse,
     SystemHealth,
 )
-from app.services.analysis import build_dashboard, build_item_detail
+from app.services.analysis import build_dashboard, build_item_detail, market_statuses
 from app.services.demo import ensure_demo
 from app.services.health import system_health
 from app.services.monitoring import build_market_monitor
@@ -162,6 +165,14 @@ def market_monitor(request: Request, session: DbSession, settings: SettingsDep) 
     scheduler = getattr(request.app.state, "market_scheduler", None)
     scheduler_running = bool(scheduler and scheduler.running)
     return build_market_monitor(session, settings, scheduler_running=scheduler_running)
+
+
+@app.get("/api/integrations", response_model=IntegrationCatalog, tags=["analysis"])
+def integrations(session: DbSession, settings: SettingsDep) -> IntegrationCatalog:
+    return IntegrationCatalog(
+        sources=source_catalog(settings, market_statuses(session, "live", settings)),
+        generated_at=datetime.now(UTC),
+    )
 
 
 @app.get("/api/items/{listing_id}", response_model=ItemDetail, tags=["analysis"])

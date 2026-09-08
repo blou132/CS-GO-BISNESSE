@@ -100,6 +100,26 @@ export interface MarketMonitorData {
   warnings: string[];
 }
 
+export interface MarketSourceInfo {
+  id: string;
+  name: string;
+  source_type: "MARKETPLACE" | "TRADE" | "REFERENCE";
+  access_status: "OFFICIAL_API" | "PUBLIC_API" | "REQUIRES_APPROVAL" | "RESEARCH_REQUIRED" | "UNAVAILABLE";
+  auth_required: boolean;
+  configured: boolean;
+  runtime_status: string;
+  capabilities: string[];
+  official_url: string;
+  documentation_url: string | null;
+  note: string;
+  verified_at: string;
+}
+
+export interface IntegrationCatalog {
+  sources: MarketSourceInfo[];
+  generated_at: string;
+}
+
 export interface Comparison {
   platform: Platform;
   observation_type: string;

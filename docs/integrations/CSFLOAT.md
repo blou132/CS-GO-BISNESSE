@@ -2,7 +2,7 @@
 
 - Statut : `OFFICIAL_API`
 - Documentation officielle : <https://docs.csfloat.com/>
-- Vérification : 5 septembre 2026
+- Vérification : 8 septembre 2026
 - Base : `https://csfloat.com/api/v1`
 
 ## API et authentification
@@ -16,6 +16,9 @@ clé a renvoyé HTTP 403 le 5 septembre 2026. L'adaptateur exige donc
 `GET /listings` expose notamment identifiant, état, type, prix en cents USD,
 nom de marché, float, paint index/seed, StatTrak, Souvenir, stickers et inspect
 link. L'adaptateur accepte uniquement les annonces `buy_now` à l'état `listed`.
+Les filtres officiels incluent notamment prix, float, paint seed/index,
+collection, catégorie, stickers et nom de marché. Les tris documentés incluent
+prix, date, float, `best_deal` et `float_rank`.
 
 ## Limites
 

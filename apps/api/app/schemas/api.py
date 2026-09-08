@@ -9,6 +9,14 @@ Platform = Literal["csfloat", "skinport", "dmarket"]
 IntegrationStatus = Literal[
     "OFFICIAL_API", "SUPPORTED", "PARTIAL", "RESEARCH_REQUIRED", "UNAVAILABLE"
 ]
+SourceType = Literal["MARKETPLACE", "TRADE", "REFERENCE"]
+SourceAccessStatus = Literal[
+    "OFFICIAL_API",
+    "PUBLIC_API",
+    "REQUIRES_APPROVAL",
+    "RESEARCH_REQUIRED",
+    "UNAVAILABLE",
+]
 MarketAvailability = Literal[
     "online",
     "not_configured",
@@ -122,6 +130,26 @@ class MarketMonitor(BaseModel):
     platforms: list[MarketStatus]
     metrics: MarketMetrics
     warnings: list[str]
+
+
+class MarketSourceInfo(BaseModel):
+    id: str
+    name: str
+    source_type: SourceType
+    access_status: SourceAccessStatus
+    auth_required: bool
+    configured: bool
+    runtime_status: str
+    capabilities: tuple[str, ...]
+    official_url: str
+    documentation_url: str | None
+    note: str
+    verified_at: str
+
+
+class IntegrationCatalog(BaseModel):
+    sources: list[MarketSourceInfo]
+    generated_at: datetime
 
 
 class Comparison(BaseModel):

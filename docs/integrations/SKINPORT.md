@@ -3,7 +3,7 @@
 - Statut : `PARTIAL`
 - Documentation officielle : <https://docs.skinport.com/items>
 - Historique officiel étudié : <https://docs.skinport.com/sales/history>
-- Vérification : 5 septembre 2026
+- Vérification : 8 septembre 2026
 - Base : `https://api.skinport.com/v1`
 
 ## API et authentification
@@ -25,9 +25,14 @@ de 38 secondes entre appels de ce fournisseur. Brotli est pris en charge par
 la dépendance HTTP du backend.
 
 `GET /sales/history` fournit des statistiques agrégées par fenêtres (24 h,
-7, 30 et 90 jours). Il n'est pas encore persisté : le modèle d'observation du
-MVP ne décrit pas assez précisément fenêtre, min/max/moyenne/médiane et volume
-pour le faire sans perte sémantique. Ce point est la prochaine extension de
-l'adaptateur. Les contrats ont été validés sur fixtures HTTP et un appel live
+7, 30 et 90 jours). Elles doivent être persistées dans un modèle dédié plutôt
+que transformées en ventes unitaires.
+
+Le Sale Feed officiel utilise Socket.IO avec un parser MessagePack et publie
+des événements `listed` et `sold`. `price_changed` et `canceled` ne sont pas
+supportés. Son normaliseur peut alimenter le pipeline commun, mais le transport
+doit être validé séparément avant activation 24/7.
+
+Les contrats ont été validés sur fixtures HTTP et un appel live
 de `GET /items` a réussi en HTTP 200 le 5 septembre 2026. L'observation ainsi
 collectée reste un agrégat et n'est jamais présentée comme une vente unitaire.
