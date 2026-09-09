@@ -82,6 +82,9 @@ class CS2Item(Base):
     rarity: Mapped[str | None] = mapped_column(String(128))
     quality: Mapped[str | None] = mapped_column(String(128))
     collection: Mapped[str | None] = mapped_column(String(256))
+    scm_price: Mapped[Decimal | None] = mapped_column(Numeric(20, 8))
+    scm_volume: Mapped[int | None] = mapped_column(Integer)
+    source_attributes: Mapped[dict[str, object]] = mapped_column(JSON, default=dict)
     inspect_link: Mapped[str | None] = mapped_column(String(2048))
     tradable: Mapped[bool | None] = mapped_column(Boolean)
     tradable_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -102,6 +105,7 @@ class ItemSticker(Base):
     slot: Mapped[int | None] = mapped_column(Integer)
     wear: Mapped[Decimal | None] = mapped_column(Numeric(20, 12))
     steam_price: Mapped[Decimal | None] = mapped_column(Numeric(20, 8))
+    steam_volume: Mapped[int | None] = mapped_column(Integer)
     estimated_applied_value: Mapped[Decimal | None] = mapped_column(Numeric(20, 8))
 
 
@@ -180,15 +184,17 @@ class AggregateMarketStat(Base):
 class RealizedSale(Base):
     __tablename__ = "realized_sales"
     __table_args__ = (
+        UniqueConstraint("fingerprint", name="uq_realized_sale_fingerprint"),
         UniqueConstraint("mode", "platform", "external_id", name="uq_realized_sale_source"),
         CheckConstraint("mode IN ('demo', 'live')"),
         CheckConstraint("price_original >= 0"),
         Index("ix_realized_sale_lookup", "mode", "market_hash_name", "sold_at"),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    fingerprint: Mapped[str] = mapped_column(String(64))
     mode: Mapped[str] = mapped_column(String(8))
     platform: Mapped[str] = mapped_column(String(32))
-    external_id: Mapped[str] = mapped_column(String(256))
+    external_id: Mapped[str | None] = mapped_column(String(256))
     canonical_item_id: Mapped[str | None] = mapped_column(
         ForeignKey("canonical_items.id", ondelete="SET NULL")
     )
@@ -361,6 +367,7 @@ class PlatformFeeSchedule(Base):
         CheckConstraint("fee_type IN ('BUY','SELL','DEPOSIT','WITHDRAW','TRADE','PAYMENT','FX')"),
         CheckConstraint("rate IS NULL OR (rate >= 0 AND rate <= 1)"),
         CheckConstraint("fixed_amount IS NULL OR fixed_amount >= 0"),
+        CheckConstraint("minimum_fee IS NULL OR minimum_fee >= 0"),
         CheckConstraint("min_amount IS NULL OR min_amount >= 0"),
         CheckConstraint("max_amount IS NULL OR max_amount >= 0"),
         CheckConstraint("rate IS NOT NULL OR fixed_amount IS NOT NULL"),
@@ -371,6 +378,7 @@ class PlatformFeeSchedule(Base):
     fee_type: Mapped[str] = mapped_column(String(20))
     rate: Mapped[Decimal | None] = mapped_column(Numeric(16, 12))
     fixed_amount: Mapped[Decimal | None] = mapped_column(Numeric(20, 8))
+    minimum_fee: Mapped[Decimal | None] = mapped_column(Numeric(20, 8))
     currency: Mapped[str | None] = mapped_column(String(3))
     min_amount: Mapped[Decimal | None] = mapped_column(Numeric(20, 8))
     max_amount: Mapped[Decimal | None] = mapped_column(Numeric(20, 8))

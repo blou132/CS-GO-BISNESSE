@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -58,7 +58,7 @@ class ReadOnlyHTTP:
     async def get(
         self,
         path: str,
-        params: dict[str, str | int] | None = None,
+        params: Mapping[str, str | int | float] | None = None,
         *,
         headers: dict[str, str] | None = None,
         signer: Callable[[httpx.Request], None] | None = None,

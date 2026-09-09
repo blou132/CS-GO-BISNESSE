@@ -1,7 +1,8 @@
-from datetime import datetime
-from typing import Any
+from datetime import UTC, datetime
+from typing import Any, Literal
 
 import httpx
+from pydantic import BaseModel, ConfigDict, Field
 
 from .base import (
     AdapterListing,
@@ -37,12 +38,12 @@ class CSFloatAdapter(MarketAdapter):
         await self._http.aclose()
 
     async def search_items(self, query: str) -> AdapterResult:
+        return await self.search(CSFloatSearch(market_hash_name=check_query(query) or None))
+
+    async def search(self, filters: "CSFloatSearch") -> AdapterResult:
         if not self._headers:
             raise ConfigurationError("Clé CSFLOAT_API_KEY requise pour l'accès API actuel.")
-        query = check_query(query)
-        params: dict[str, str | int] = {"limit": 50, "sort_by": "lowest_price", "type": "buy_now"}
-        if query:
-            params["market_hash_name"] = query
+        params = filters.parameters()
         response = await self._http.get("/listings", params, headers=self._headers)
         payload = response.payload
         rows = array_value(payload.get("data") if isinstance(payload, dict) else payload)
@@ -82,19 +83,28 @@ class CSFloatAdapter(MarketAdapter):
         if row.get("type") != "buy_now" or row.get("state") != "listed":
             raise ValueError("Only active fixed-price listings are supported")
         item = object_value(row["item"])
-        stickers = [
-            AdapterSticker(name=sticker["name"], slot=sticker.get("slot"), wear=sticker.get("wear"))
-            for sticker in item.get("stickers", [])
-        ]
+        stickers = [_sticker(object_value(sticker)) for sticker in item.get("stickers", [])]
+        scm = object_value(item.get("scm", {}))
+        tradable, tradable_at = _tradable(item.get("tradable"))
         identity = item_identity(
             item["market_hash_name"],
+            asset_id=_optional_string(item.get("asset_id")),
+            def_index=_optional_int(item.get("def_index")),
             exterior=item.get("wear_name"),
             stattrak=item.get("is_stattrak"),
             souvenir=item.get("is_souvenir"),
             float_value=item.get("float_value"),
             paint_index=item.get("paint_index"),
             paint_seed=item.get("paint_seed"),
+            rarity=_optional_string(item.get("rarity")),
+            quality=_optional_string(item.get("quality")),
+            collection=_optional_string(item.get("collection")),
+            scm_price=cents(scm["price"]) if scm.get("price") is not None else None,
+            scm_volume=_optional_int(scm.get("volume")),
+            source_attributes={"scm_currency": "USD"} if scm else {},
             inspect_link=item.get("inspect_link"),
+            tradable=tradable,
+            tradable_at=tradable_at,
             stickers=stickers,
         )
         identifier = row["id"]
@@ -109,3 +119,86 @@ class CSFloatAdapter(MarketAdapter):
             observed_at=observed_at,
             listed_at=parse_listed_at(row.get("created_at")),
         )
+
+
+class CSFloatSearch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    market_hash_name: str | None = Field(default=None, max_length=512)
+    strategy: Literal["WATCHLIST", "OPPORTUNITY_SCAN", "DISCOVERY"] = "WATCHLIST"
+    min_price_cents: int | None = Field(default=None, ge=0)
+    max_price_cents: int | None = Field(default=None, ge=0)
+    min_float: float | None = Field(default=None, ge=0, le=1)
+    max_float: float | None = Field(default=None, ge=0, le=1)
+    paint_seed: int | None = Field(default=None, ge=0, le=1000)
+    paint_index: int | None = Field(default=None, ge=0)
+    def_index: int | None = Field(default=None, ge=0)
+    collection: str | None = Field(default=None, max_length=128)
+    category: str | None = Field(default=None, max_length=128)
+    stickers: str | None = Field(default=None, pattern=r"^\d+(?:\|\d+)?(?:,\d+(?:\|\d+)?)*$")
+    sort_by: (
+        Literal["lowest_price", "most_recent", "lowest_float", "best_deal", "float_rank"] | None
+    ) = None
+    limit: int = Field(default=50, ge=1, le=50)
+
+    def parameters(self) -> dict[str, str | int | float]:
+        strategy_sort = {
+            "WATCHLIST": "lowest_price",
+            "OPPORTUNITY_SCAN": "best_deal",
+            "DISCOVERY": "most_recent",
+        }
+        params: dict[str, str | int | float] = {
+            "limit": min(self.limit, 20) if self.strategy == "DISCOVERY" else self.limit,
+            "sort_by": self.sort_by or strategy_sort[self.strategy],
+            "type": "buy_now",
+        }
+        fields = {
+            "market_hash_name": self.market_hash_name,
+            "min_price": self.min_price_cents,
+            "max_price": self.max_price_cents,
+            "min_float": self.min_float,
+            "max_float": self.max_float,
+            "paint_seed": self.paint_seed,
+            "paint_index": self.paint_index,
+            "def_index": self.def_index,
+            "collection": self.collection,
+            "category": self.category,
+            "stickers": self.stickers,
+        }
+        params.update({name: value for name, value in fields.items() if value is not None})
+        return params
+
+
+def _sticker(value: dict[str, Any]) -> AdapterSticker:
+    scm = object_value(value.get("scm", {}))
+    return AdapterSticker(
+        name=value["name"],
+        slot=value.get("slot"),
+        wear=value.get("wear"),
+        steam_price=cents(scm["price"]) if scm.get("price") is not None else None,
+        steam_volume=_optional_int(scm.get("volume")),
+    )
+
+
+def _tradable(value: Any) -> tuple[bool | None, datetime | None]:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None, None
+    if value == 0:
+        return True, None
+    return False, datetime.fromtimestamp(value, UTC)
+
+
+def _optional_string(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (str, int)):
+        raise ValueError("Invalid string value")
+    return str(value)
+
+
+def _optional_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError("Invalid integer value")
+    return int(value)

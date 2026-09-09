@@ -8,7 +8,7 @@
 
 ## API et authentification
 
-Le MVP appelle `GET /items` sans authentification, avec `app_id=730`,
+L'adaptateur appelle `GET /items` sans authentification, avec `app_id=730`,
 `currency=EUR`, `tradable=true` et l'en-tête Brotli obligatoire
 `Accept-Encoding: br`. L'endpoint fournit des prix et quantités agrégés par
 `market_hash_name`, pas les exemplaires individuels avec leur float ou seed.
@@ -25,14 +25,18 @@ de 38 secondes entre appels de ce fournisseur. Brotli est pris en charge par
 la dépendance HTTP du backend.
 
 `GET /sales/history` fournit des statistiques agrégées par fenêtres (24 h,
-7, 30 et 90 jours). Elles doivent être persistées dans un modèle dédié plutôt
-que transformées en ventes unitaires.
+7, 30 et 90 jours). L'adaptateur normalise min/max/moyenne/médiane/volume dans
+`AggregateMarketStat`; aucune transaction unitaire n'est créée depuis cet
+endpoint. Une synchronisation ciblée demande uniquement l'historique des noms
+exacts retenus par la recherche, par groupes bornés à 20.
 
 Le Sale Feed officiel utilise Socket.IO avec un parser MessagePack et publie
 des événements `listed` et `sold`. `price_changed` et `canceled` ne sont pas
-supportés. Son normaliseur peut alimenter le pipeline commun, mais le transport
-doit être validé séparément avant activation 24/7.
+supportés. Son normaliseur typé alimente le contrat commun en listings exacts
+ou ventes réalisées à partir du `saleId`. Le transport Socket.IO/MessagePack,
+la reconnexion et la file bornée ne sont pas activés : ils doivent être validés
+séparément avant toute exécution 24/7.
 
-Les contrats ont été validés sur fixtures HTTP et un appel live
+Les contrats REST et le normaliseur du feed ont été validés sur fixtures. Un appel live
 de `GET /items` a réussi en HTTP 200 le 5 septembre 2026. L'observation ainsi
 collectée reste un agrégat et n'est jamais présentée comme une vente unitaire.
