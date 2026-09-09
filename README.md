@@ -173,6 +173,7 @@ d'exploitation. Le mot de passe brut n'est jamais stocké par l'application.
 - [Validation serveur](docs/SERVER_VALIDATION.md)
 - [Monitoring marché 24/7](docs/MARKET_MONITORING.md)
 - [Modèle de données](docs/DATA_MODEL.md)
+- [Price Engine V2](docs/PRICE_ENGINE.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Audit initial](docs/AUDIT.md)
 - [Intégrations officielles](docs/integrations/)

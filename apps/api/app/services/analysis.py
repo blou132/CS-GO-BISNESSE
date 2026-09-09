@@ -2,18 +2,40 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal
+from math import ceil
 from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import Settings
-from app.models import CS2Item, MarketListing, MarketOpportunity, MarketSyncState, PriceObservation
+from app.models import (
+    AggregateMarketStat,
+    BuyOrderObservation,
+    CS2Item,
+    MarketListing,
+    MarketOpportunity,
+    MarketSyncState,
+    PriceObservation,
+    RealizedSale,
+)
 from app.pricing.comparison import float_score, summarize
 from app.pricing.finance import ProfitInput, calculate_profit
 from app.pricing.opportunity import OpportunityComponents, calculate_opportunity_score
+from app.pricing.valuation import (
+    LiquidityCategory,
+    LiquidityInput,
+    MarketEvidence,
+    ReferenceMethod,
+    RiskInput,
+    calculate_liquidity,
+    calculate_reference_price,
+    calculate_risk,
+    calculate_spread,
+)
 from app.schemas.api import (
     Comparison,
+    CurrentMarketSnapshot,
     Dashboard,
     Freshness,
     IntegrationStatus,
@@ -44,8 +66,26 @@ class Analysis:
     opportunity_score: int | None
     float_score: int | None
     liquidity: int | None
+    liquidity_category: LiquidityCategory | None
+    liquidity_evidence_completeness: int | None
     confidence: int | None
+    reference_method: ReferenceMethod | None
+    reference_sources: tuple[str, ...]
+    reference_calculated_at: datetime | None
+    spread_eur: Decimal | None
+    spread_percent: Decimal | None
+    risk_score: int | None
+    risk_factors: tuple[str, ...]
     warnings: list[str]
+
+
+@dataclass(frozen=True)
+class MarketData:
+    listings: list[MarketListing]
+    observations: list[PriceObservation]
+    aggregates: list[AggregateMarketStat]
+    realized_sales: list[RealizedSale]
+    buy_orders: list[BuyOrderObservation]
 
 
 def _quantize(value: Decimal | None) -> Decimal | None:
@@ -54,39 +94,46 @@ def _quantize(value: Decimal | None) -> Decimal | None:
 
 def _analyse(
     listing: MarketListing,
-    observations: list[PriceObservation],
+    evidence: list[MarketEvidence],
     peer_floats: list[Decimal],
     mode: Mode,
 ) -> Analysis:
+    now = datetime.now(UTC)
     score_float = float_score(listing.item.float_value, peer_floats)
-    sales = [
-        item
-        for item in observations
-        if item.observation_type == "SALE" and item.price_eur_reference is not None
-    ]
-    sale_summary = summarize([cast(Decimal, item.price_eur_reference) for item in sales])
-    if sale_summary is None or sale_summary.sample_size < 3:
-        return Analysis(
-            None,
-            None,
-            None,
-            None,
-            score_float,
-            None,
-            None,
-            ["Historique de ventes réalisé insuffisant : valeur et profit laissés inconnus."],
+    reference = calculate_reference_price(evidence, now=now)
+    spread = calculate_spread(evidence, now=now)
+    liquidity_result = calculate_liquidity(
+        _liquidity_input(evidence, spread.percentage if spread is not None else None),
+        now=now,
+    )
+    newest = max((item.observed_at for item in evidence), default=None)
+    capital_lock_days = _capital_lock_days(listing, now)
+    risk = calculate_risk(
+        values=_risk_input(
+            listing,
+            liquidity_result.score if liquidity_result else None,
+            reference.confidence if reference else None,
+            max(Decimal(0), spread.percentage) if spread else None,
+            newest,
+            capital_lock_days,
+            len(reference.sources) if reference else 0,
+        ),
+        now=now,
+    )
+    warnings = _reference_warnings(reference.method if reference else None)
+    if liquidity_result is not None and liquidity_result.evidence_completeness < 50:
+        warnings.append("Liquidité calculée avec moins de la moitié des signaux disponibles.")
+    if capital_lock_days:
+        warnings.append(
+            f"Trade lock observé : capital immobilisé environ {capital_lock_days} jour(s)."
         )
 
-    estimated = sale_summary.median
-    volume = sum(item.volume or 0 for item in sales)
-    liquidity = min(100, volume * 5)
-    confidence = min(90, 35 + sale_summary.sample_size * 4)
-    warnings = ["Valeur médiane issue de ventes observées ; elle ne constitue pas un prix garanti."]
+    estimated = reference.value_eur if reference else None
 
     potential_profit: Decimal | None = None
     roi: Decimal | None = None
     opportunity: int | None = None
-    if mode == "demo" and listing.price_eur_reference is not None:
+    if mode == "demo" and listing.price_eur_reference is not None and estimated is not None:
         sale_fee = estimated * DEMO_SALE_FEE_RATE
         result = calculate_profit(
             ProfitInput(
@@ -99,23 +146,22 @@ def _analyse(
         roi = result.roi
         discount = max(Decimal(0), (estimated - listing.price_eur_reference) / estimated * 100)
         price_component = min(100, int(discount * 5))
-        history_component = min(100, sale_summary.sample_size * 5)
+        history_component = min(100, reference.sample_size * 5) if reference else 0
         float_component = score_float if score_float is not None else 0
-        risk_component = 50
         opportunity = calculate_opportunity_score(
             OpportunityComponents(
                 price_discount=price_component,
-                liquidity=liquidity,
+                liquidity=liquidity_result.score if liquidity_result else 0,
                 sales_history=history_component,
                 float_quality=float_component,
-                market_confidence=confidence,
-                risk=risk_component,
+                market_confidence=reference.confidence if reference else 0,
+                risk=100 - risk.score,
             )
         )
         warnings.append(
             "DEMO — profit calculé avec 10 % de frais de vente synthétiques et zéro autre frais."
         )
-    elif listing.price_eur_reference is not None:
+    elif listing.price_eur_reference is not None and estimated is not None:
         warnings.append(
             "Frais effectifs et plateforme de revente inconnus : profit et ROI non calculés."
         )
@@ -125,13 +171,22 @@ def _analyse(
         roi.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP) if roi is not None else None,
         opportunity,
         score_float,
-        liquidity,
-        confidence,
+        liquidity_result.score if liquidity_result else None,
+        liquidity_result.category if liquidity_result else None,
+        liquidity_result.evidence_completeness if liquidity_result else None,
+        reference.confidence if reference else None,
+        reference.method if reference else None,
+        reference.sources if reference else (),
+        reference.calculated_at if reference else None,
+        _quantize(spread.absolute_eur) if spread else None,
+        (spread.percentage.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP) if spread else None),
+        risk.score,
+        risk.factors,
         warnings,
     )
 
 
-def _load(session: Session, mode: Mode) -> tuple[list[MarketListing], list[PriceObservation]]:
+def _load(session: Session, mode: Mode) -> MarketData:
     listings = list(
         session.scalars(
             select(MarketListing)
@@ -147,18 +202,39 @@ def _load(session: Session, mode: Mode) -> tuple[list[MarketListing], list[Price
             .order_by(PriceObservation.timestamp.desc())
         )
     )
-    return listings, observations
+    aggregates = list(
+        session.scalars(
+            select(AggregateMarketStat)
+            .where(AggregateMarketStat.mode == mode)
+            .order_by(AggregateMarketStat.observed_at.desc())
+        )
+    )
+    realized_sales = list(
+        session.scalars(
+            select(RealizedSale)
+            .where(RealizedSale.mode == mode)
+            .order_by(RealizedSale.sold_at.desc())
+        )
+    )
+    buy_orders = list(
+        session.scalars(
+            select(BuyOrderObservation)
+            .where(BuyOrderObservation.mode == mode)
+            .order_by(BuyOrderObservation.observed_at.desc())
+        )
+    )
+    return MarketData(listings, observations, aggregates, realized_sales, buy_orders)
 
 
 def _row(
     listing: MarketListing,
-    observations_by_name: dict[str, list[PriceObservation]],
+    evidence_by_name: dict[str, list[MarketEvidence]],
     floats_by_name: dict[str, list[Decimal]],
     mode: Mode,
 ) -> ScannerRow:
     analysis = _analyse(
         listing,
-        observations_by_name.get(listing.item.market_hash_name, []),
+        evidence_by_name.get(listing.item.market_hash_name, []),
         floats_by_name.get(listing.item.market_hash_name, []),
         mode,
     )
@@ -186,7 +262,16 @@ def _row(
         opportunity_score=analysis.opportunity_score,
         float_score=analysis.float_score,
         liquidity=analysis.liquidity,
+        liquidity_category=analysis.liquidity_category,
+        liquidity_evidence_completeness=analysis.liquidity_evidence_completeness,
         confidence=analysis.confidence,
+        reference_method=analysis.reference_method,
+        reference_sources=list(analysis.reference_sources),
+        reference_calculated_at=analysis.reference_calculated_at,
+        spread_eur=analysis.spread_eur,
+        spread_percent=analysis.spread_percent,
+        risk_score=analysis.risk_score,
+        risk_factors=list(analysis.risk_factors),
         stickers=[Sticker.model_validate(sticker) for sticker in listing.item.stickers],
         warnings=[*listing.warnings, *analysis.warnings],
     )
@@ -295,15 +380,13 @@ def _freshness(
 
 
 def build_dashboard(session: Session, mode: Mode, settings: Settings) -> Dashboard:
-    listings, observations = _load(session, mode)
-    by_name: dict[str, list[PriceObservation]] = defaultdict(list)
+    data = _load(session, mode)
+    evidence_by_name = _build_evidence(data)
     floats: dict[str, list[Decimal]] = defaultdict(list)
-    for observation in observations:
-        by_name[observation.market_hash_name].append(observation)
-    for listing in listings:
+    for listing in data.listings:
         if listing.item.float_value is not None:
             floats[listing.item.market_hash_name].append(listing.item.float_value)
-    rows = [_row(listing, by_name, floats, mode) for listing in listings]
+    rows = [_row(listing, evidence_by_name, floats, mode) for listing in data.listings]
     statuses = market_statuses(session, mode, settings)
     last_sync = max(
         (status.last_sync_at for status in statuses if status.last_sync_at is not None),
@@ -347,6 +430,7 @@ def build_item_detail(
             .order_by(PriceObservation.timestamp.desc())
         )
     )
+    data = _load(session, mode)
     grouped: dict[tuple[str, str], list[Decimal]] = defaultdict(list)
     for observation in observations:
         if observation.price_eur_reference is not None:
@@ -388,28 +472,31 @@ def build_item_detail(
         mode=mode,
         item=row,
         comparisons=comparisons,
+        market_snapshots=_market_snapshots(
+            data,
+            row.market_hash_name,
+            settings,
+        ),
         history=[Observation.model_validate(item) for item in observations],
         warnings=dashboard.warnings,
     )
 
 
 def refresh_opportunities(session: Session, mode: Mode, settings: Settings) -> int:
-    listings, observations = _load(session, mode)
-    by_name: dict[str, list[PriceObservation]] = defaultdict(list)
+    data = _load(session, mode)
+    evidence_by_name = _build_evidence(data)
     floats: dict[str, list[Decimal]] = defaultdict(list)
-    for observation in observations:
-        by_name[observation.market_hash_name].append(observation)
-    for listing in listings:
+    for listing in data.listings:
         if listing.item.float_value is not None:
             floats[listing.item.market_hash_name].append(listing.item.float_value)
 
     now = datetime.now(UTC)
     active_listing_ids: set[str] = set()
     count = 0
-    for listing in listings:
+    for listing in data.listings:
         analysis = _analyse(
             listing,
-            by_name.get(listing.item.market_hash_name, []),
+            evidence_by_name.get(listing.item.market_hash_name, []),
             floats.get(listing.item.market_hash_name, []),
             mode,
         )
@@ -456,3 +543,238 @@ def refresh_opportunities(session: Session, mode: Mode, settings: Settings) -> i
             opportunity.updated_at = now
     session.flush()
     return count
+
+
+def _build_evidence(data: MarketData) -> dict[str, list[MarketEvidence]]:
+    result: dict[str, list[MarketEvidence]] = defaultdict(list)
+    for listing in data.listings:
+        if listing.price_eur_reference is not None:
+            result[listing.item.market_hash_name].append(
+                MarketEvidence(
+                    platform=listing.platform,
+                    kind="LISTING",
+                    value_eur=listing.price_eur_reference,
+                    observed_at=listing.observed_at,
+                )
+            )
+    for sale in data.realized_sales:
+        if sale.price_eur_reference is not None:
+            result[sale.market_hash_name].append(
+                MarketEvidence(
+                    platform=sale.platform,
+                    kind="REALIZED_SALE",
+                    value_eur=sale.price_eur_reference,
+                    observed_at=sale.sold_at,
+                    volume=1,
+                )
+            )
+    for aggregate in data.aggregates:
+        if aggregate.median_eur_reference is not None:
+            result[aggregate.market_hash_name].append(
+                MarketEvidence(
+                    platform=aggregate.platform,
+                    kind="HISTORICAL_MEDIAN",
+                    value_eur=aggregate.median_eur_reference,
+                    observed_at=aggregate.observed_at,
+                    volume=aggregate.volume,
+                    window=aggregate.window_code,
+                )
+            )
+    for order in data.buy_orders:
+        if order.price_eur_reference is not None:
+            result[order.market_hash_name].append(
+                MarketEvidence(
+                    platform=order.platform,
+                    kind="BUY_ORDER",
+                    value_eur=order.price_eur_reference,
+                    observed_at=order.observed_at,
+                    volume=order.quantity,
+                )
+            )
+    # Legacy/demo SALE observations predate the dedicated realized_sales table.
+    for observation in data.observations:
+        if observation.observation_type == "SALE" and observation.price_eur_reference is not None:
+            result[observation.market_hash_name].append(
+                MarketEvidence(
+                    platform=observation.platform,
+                    kind="REALIZED_SALE",
+                    value_eur=observation.price_eur_reference,
+                    observed_at=observation.timestamp,
+                    volume=observation.volume,
+                )
+            )
+    return result
+
+
+def _liquidity_input(
+    evidence: list[MarketEvidence], spread_percent: Decimal | None
+) -> LiquidityInput:
+    aggregates: dict[tuple[str, str], MarketEvidence] = {}
+    for item in evidence:
+        if item.kind != "HISTORICAL_MEDIAN" or item.window is None:
+            continue
+        key = (item.platform, item.window)
+        current = aggregates.get(key)
+        if current is None or item.observed_at > current.observed_at:
+            aggregates[key] = item
+
+    orders_by_platform: dict[str, list[MarketEvidence]] = defaultdict(list)
+    for item in evidence:
+        if item.kind == "BUY_ORDER":
+            orders_by_platform[item.platform].append(item)
+    current_orders: list[MarketEvidence] = []
+    for orders in orders_by_platform.values():
+        newest = max(item.observed_at for item in orders)
+        current_orders.extend(item for item in orders if item.observed_at == newest)
+
+    def volume(window: str) -> int | None:
+        values = [item.volume for item in aggregates.values() if item.window == window]
+        known = [item for item in values if item is not None]
+        return sum(known) if known else None
+
+    freshness_values = [item.observed_at for item in evidence]
+    return LiquidityInput(
+        volume_24h=volume("24H"),
+        volume_7d=volume("7D"),
+        volume_30d=volume("30D"),
+        listing_count=(
+            sum(item.kind == "LISTING" for item in evidence)
+            if any(item.kind == "LISTING" for item in evidence)
+            else None
+        ),
+        buy_order_quantity=(
+            sum(item.volume or 0 for item in current_orders) if current_orders else None
+        ),
+        spread_percent=max(Decimal(0), spread_percent) if spread_percent is not None else None,
+        freshest_at=max(freshness_values) if freshness_values else None,
+    )
+
+
+def _risk_input(
+    listing: MarketListing,
+    liquidity_score: int | None,
+    confidence: int | None,
+    spread_percent: Decimal | None,
+    newest: datetime | None,
+    capital_lock_days: int | None,
+    source_count: int,
+) -> RiskInput:
+    return RiskInput(
+        liquidity_score=liquidity_score,
+        price_confidence=confidence,
+        spread_percent=spread_percent,
+        freshest_at=newest,
+        source_count=source_count,
+        has_fx_exposure=listing.currency_original != "EUR",
+        capital_lock_days=capital_lock_days,
+        unusual_item=bool(
+            listing.item.doppler_phase
+            or listing.item.fade_percentage is not None
+            or listing.item.stickers
+        ),
+    )
+
+
+def _capital_lock_days(listing: MarketListing, now: datetime) -> int | None:
+    if listing.item.tradable_at is None:
+        return None
+    remaining = (_aware(listing.item.tradable_at) - now).total_seconds()
+    return max(0, ceil(remaining / 86400))
+
+
+def _reference_warnings(method: ReferenceMethod | None) -> list[str]:
+    if method is None:
+        return ["Aucune preuve EUR récente exploitable : valeur et profit laissés inconnus."]
+    if method == "REALIZED_SALES_MEDIAN":
+        return ["Valeur médiane issue de ventes observées ; elle ne constitue pas un prix garanti."]
+    if method == "HISTORICAL_MEDIANS":
+        return ["Valeur issue de médianes historiques agrégées, sans vente unitaire garantie."]
+    if method == "CURRENT_BUY_ORDERS":
+        return ["Valeur de repli issue de la demande actuelle ; le bid peut disparaître."]
+    return ["Confiance faible : valeur de repli issue uniquement des prix demandés actuels."]
+
+
+def _market_snapshots(
+    data: MarketData,
+    market_hash_name: str,
+    settings: Settings,
+) -> list[CurrentMarketSnapshot]:
+    now = datetime.now(UTC)
+    result: list[CurrentMarketSnapshot] = []
+    for platform in PLATFORMS:
+        listings = [
+            item
+            for item in data.listings
+            if item.platform == platform
+            and item.item.market_hash_name == market_hash_name
+            and item.price_eur_reference is not None
+        ]
+        orders = [
+            item
+            for item in data.buy_orders
+            if item.platform == platform
+            and item.market_hash_name == market_hash_name
+            and item.price_eur_reference is not None
+        ]
+        current_orders: list[BuyOrderObservation] = []
+        if orders:
+            latest_order_at = max(item.observed_at for item in orders)
+            current_orders = [item for item in orders if item.observed_at == latest_order_at]
+        aggregates = [
+            item
+            for item in data.aggregates
+            if item.platform == platform and item.market_hash_name == market_hash_name
+        ]
+        median_7d = _latest_aggregate(aggregates, "7D")
+        median_30d = _latest_aggregate(aggregates, "30D")
+        sales = [
+            item
+            for item in data.realized_sales
+            if item.platform == platform and item.market_hash_name == market_hash_name
+        ]
+        timestamps = [
+            *(item.observed_at for item in listings),
+            *(item.observed_at for item in current_orders),
+            *(item.observed_at for item in aggregates),
+            *(item.observed_at for item in sales),
+        ]
+        freshest_at = max(timestamps) if timestamps else None
+        currencies = sorted(
+            {
+                *(item.currency_original for item in listings),
+                *(item.currency_original for item in current_orders),
+                *(item.currency for item in aggregates),
+                *(item.currency_original for item in sales),
+            }
+        )
+        result.append(
+            CurrentMarketSnapshot(
+                platform=platform,
+                ask_eur=_quantize(
+                    min(
+                        (cast(Decimal, item.price_eur_reference) for item in listings),
+                        default=None,
+                    )
+                ),
+                bid_eur=_quantize(
+                    max(
+                        (cast(Decimal, item.price_eur_reference) for item in current_orders),
+                        default=None,
+                    )
+                ),
+                median_7d_eur=_quantize(median_7d.median_eur_reference if median_7d else None),
+                median_30d_eur=_quantize(median_30d.median_eur_reference if median_30d else None),
+                volume_30d=median_30d.volume if median_30d else None,
+                currencies=currencies,
+                freshest_at=freshest_at,
+                freshness=_freshness(freshest_at, settings, now),
+            )
+        )
+    return result
+
+
+def _latest_aggregate(
+    aggregates: list[AggregateMarketStat], window: str
+) -> AggregateMarketStat | None:
+    matching = [item for item in aggregates if item.window_code == window]
+    return max(matching, key=lambda item: item.observed_at, default=None)

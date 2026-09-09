@@ -29,6 +29,7 @@ MarketAvailability = Literal[
 ]
 HealthAvailability = Literal["healthy", "unavailable", "unknown"]
 Freshness = Literal["fresh", "stale", "very_stale", "unknown"]
+LiquidityCategory = Literal["VERY_LOW", "LOW", "MEDIUM", "HIGH", "VERY_HIGH"]
 Money = Annotated[Decimal, Field(ge=0, allow_inf_nan=False, max_digits=20, decimal_places=8)]
 
 
@@ -65,7 +66,16 @@ class ScannerRow(BaseModel):
     opportunity_score: int | None = None
     float_score: int | None = None
     liquidity: int | None = None
+    liquidity_category: LiquidityCategory | None = None
+    liquidity_evidence_completeness: int | None = None
     confidence: int | None = None
+    reference_method: str | None = None
+    reference_sources: list[str] = Field(default_factory=list)
+    reference_calculated_at: datetime | None = None
+    spread_eur: Decimal | None = None
+    spread_percent: Decimal | None = None
+    risk_score: int | None = None
+    risk_factors: list[str] = Field(default_factory=list)
     stickers: list[Sticker] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
 
@@ -173,10 +183,23 @@ class Observation(BaseModel):
     volume: int | None
 
 
+class CurrentMarketSnapshot(BaseModel):
+    platform: Platform
+    ask_eur: Decimal | None = None
+    bid_eur: Decimal | None = None
+    median_7d_eur: Decimal | None = None
+    median_30d_eur: Decimal | None = None
+    volume_30d: int | None = None
+    currencies: list[str] = Field(default_factory=list)
+    freshest_at: datetime | None = None
+    freshness: Freshness = "unknown"
+
+
 class ItemDetail(BaseModel):
     mode: Mode
     item: ScannerRow
     comparisons: list[Comparison]
+    market_snapshots: list[CurrentMarketSnapshot] = Field(default_factory=list)
     history: list[Observation]
     warnings: list[str]
 

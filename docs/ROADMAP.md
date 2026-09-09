@@ -18,6 +18,8 @@ les preuves d'exécution de cette passe.
 | V0.9 | Opportunity Scanner | Score documenté, filtres, frais explicites, confiance et limites visibles |
 | V0.9.1 | Continuous Market Monitoring | Scheduler optionnel, statuts détaillés, métriques et persistance non destructive |
 | V0.10 | Authentification administrateur privée | Login/logout, session signée, routes protégées, rate limit et tests |
+| V0.11 | Live Market Sources | Registre sourcé, modèles normalisés V2 et adaptateurs read-only Skinport, CSFloat et DMarket |
+| V0.12 | Price + Liquidity Engine | ReferencePrice, confiance, spread, liquidité et risque testés |
 
 La préparation d'exploitation 24/7 complète ce socle : surcharge Compose de
 production, sauvegarde et restauration PostgreSQL, déploiement avec migration
@@ -34,22 +36,18 @@ profit artificiel. Les calculs démontrés avec des fixtures restent DEMO.
 
 | Version | Fonction |
 | --- | --- |
-| V0.11 | Portfolio |
-| V0.12 | Pattern Analyzer avec règles sourcées |
-| V0.13 | Sticker Analyzer, valeur appliquée séparée du prix non appliqué |
-| V0.14 | Trade Engine |
-| V0.15 | Première plateforme de trade autorisée |
-| V0.16 | Autres plateformes de trade |
-| V0.17 | Currency Engine, fournisseur FX et taux effectifs |
-| V0.18 | Fee Engine avancé |
-| V0.19 | Profit net réel avec tous les coûts de transaction |
-| V0.20 | Watchlist et alertes |
-| V0.21 | Opportunity Score avancé |
-| V0.22 | Arbitrage Market → Market |
-| V0.23 | Market → Trade |
-| V0.24 | Trade → Market |
-| V0.25 | Route Optimizer |
-| V0.26 | Backtesting |
+| V0.13 | Currency + Fee Engine et profit net réaliste |
+| V0.14 | Recherche des sources trade et fondations TradeQuote |
+| V0.15 | Float, pattern et stickers avancés avec sources vérifiables |
+| V0.16 | Portfolio |
+| V0.17 | Watchlist persistante et alertes |
+| V0.18 | Opportunity Engine multi-catégories |
+| V0.19 | Arbitrage Market → Market |
+| V0.20 | Première plateforme de trade autorisée |
+| V0.21 | Market → Trade |
+| V0.22 | Trade → Market |
+| V0.23 | Route Optimizer |
+| V0.24 | Backtesting |
 | V1.0 | Version stable |
 
 L'authentification devient un préalable à tout accès distant. Les achats

@@ -44,11 +44,25 @@ def test_health_demo_and_live_are_isolated(tmp_path, monkeypatch) -> None:
             assert payload["mode"] == "demo"
             assert len(payload["listings"]) == 16
             assert all("DEMO" in " ".join(row["warnings"]) for row in payload["listings"])
+            assert all(
+                row["reference_method"] == "REALIZED_SALES_MEDIAN" for row in payload["listings"]
+            )
+            assert all(row["risk_score"] is not None for row in payload["listings"])
             assert any(Decimal(row["potential_profit_eur"]) > 0 for row in payload["listings"])
             assert client.get("/api/dashboard?mode=live").json()["listings"] == []
             item_id = payload["listings"][0]["id"]
             detail = client.get(f"/api/items/{item_id}?mode=demo")
             assert detail.status_code == 200
+            assert len(detail.json()["market_snapshots"]) == 3
+            assert {entry["platform"] for entry in detail.json()["market_snapshots"]} == {
+                "csfloat",
+                "skinport",
+                "dmarket",
+            }
+            assert all(
+                "ask_eur" in entry and "bid_eur" in entry
+                for entry in detail.json()["market_snapshots"]
+            )
             assert any(entry["observation_type"] == "SALE" for entry in detail.json()["history"])
             assert any(
                 entry["platform"] == "skinport" and entry["observation_type"] == "AGGREGATE"

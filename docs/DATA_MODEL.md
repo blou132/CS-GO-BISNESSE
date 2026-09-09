@@ -114,18 +114,35 @@ elle expose aussi l'écart médian absolu et relatif face à la meilleure média
 
 ## Valeur, float et opportunité
 
-Une estimation de valeur requiert au moins trois observations `SALE`
-convertibles en EUR. Elle utilise leur médiane et fournit une confiance
-descriptive. Les listings et agrégats ne satisfont pas cette condition.
+Le Price Engine V2 choisit la classe de preuve la plus forte disponible :
+au moins trois ventes réalisées récentes, puis les médianes historiques
+agrégées, les ordres d'achat actuels et enfin les asks actuels. Ces replis sont
+explicitement nommés dans `reference_method`; un ask ne devient jamais une
+vente. `ReferencePrice` expose montant EUR, confiance, méthode, sources,
+taille d'échantillon et date de calcul.
+
+La confiance (0-100) combine niveau de preuve, nombre de sources, profondeur,
+volume, fraîcheur, accord entre marchés et spread. Les coefficients sont
+centralisés dans `PriceEngineConfig`. Le spread utilise le plus bas ask et le
+plus haut bid récents et conserve une valeur négative lorsqu'un bid dépasse
+l'ask au lieu de masquer ce signal.
+
+La liquidité utilise les volumes 24 h/7 j/30 j, le nombre de listings, la
+quantité demandée, le spread et la fraîcheur. Elle expose score, catégorie
+(`VERY_LOW` à `VERY_HIGH`) et complétude des preuves. Une donnée absente n'est
+pas assimilée à zéro. Le risque (0-100, valeur élevée défavorable) tient compte
+de la liquidité, de la fraîcheur, du spread, du nombre de sources, de
+l'exposition FX, du trade lock, de la confiance et des caractéristiques peu
+comparables.
 
 Le score float est un percentile inversé parmi au moins cinq exemplaires du
 même `market_hash_name`, avec mi-rang pour les ex aequo. Il ne crée aucune
 prime universelle.
 
-Le score d'opportunité initial n'est calculé que pour la démo, où les ventes
+Le score d'opportunité reste calculé uniquement pour la démo, où les ventes
 et 10 % de frais de vente sont explicitement synthétiques. Pondération
 centralisée : écart 30 %, liquidité 20 %, historique 20 %, float 15 %,
-confiance marché 10 %, risque 5 %. Les pondérations vivent dans un objet
+confiance marché 10 %, sécurité inverse du risque 5 %. Les pondérations vivent dans un objet
 immuable remplaçable et le calcul possède un test dédié. En live, profit, ROI
 et score restent inconnus tant que les frais effectifs et la route de revente
 ne le sont pas.
