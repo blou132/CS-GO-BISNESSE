@@ -6,8 +6,8 @@ from sqlalchemy import select
 from app.core.config import Settings
 from app.db.session import build_engine, build_session_factory
 from app.markets.base import AdapterItem, AdapterListing, AdapterResult
-from app.models import Base, MarketListing, PriceObservation
-from app.services.storage import persist_result
+from app.models import Base, CanonicalItem, CS2Item, MarketListing, PriceObservation
+from app.services.storage import aware, persist_result
 
 
 def _listing(external_id: str, price: str, observed_at: datetime) -> AdapterListing:
@@ -69,6 +69,8 @@ def test_listing_upsert_tracks_counts_price_changes_and_non_destructive_prune(tm
 
         listings = list(session.scalars(select(MarketListing).order_by(MarketListing.external_id)))
         observations = list(session.scalars(select(PriceObservation)))
+        canonical_items = list(session.scalars(select(CanonicalItem)))
+        canonical_item_ids = list(session.scalars(select(CS2Item.canonical_item_id)))
 
     assert first.listings_created == 1
     assert second.listings_updated == 1
@@ -78,6 +80,9 @@ def test_listing_upsert_tracks_counts_price_changes_and_non_destructive_prune(tm
     assert len(listings) == 2
     assert listings[0].status == "INACTIVE"
     assert listings[0].price_original == Decimal("12.00000000")
+    assert aware(listings[0].first_seen_at) == now
     assert listings[1].status == "ACTIVE"
+    assert len(canonical_items) == 1
+    assert canonical_item_ids == [canonical_items[0].id, canonical_items[0].id]
     assert len(observations) == 3
     engine.dispose()

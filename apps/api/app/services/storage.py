@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.currencies.service import normalize_price
 from app.markets.base import AdapterListing, AdapterObservation, AdapterResult
-from app.models import CS2Item, ItemSticker, MarketListing, PriceObservation
+from app.markets.identity import canonical_identity_key
+from app.models import CanonicalItem, CS2Item, ItemSticker, MarketListing, PriceObservation
 from app.schemas.api import Mode
 
 
@@ -32,6 +33,27 @@ def store_listing(
     mode: Mode,
     settings: Settings,
 ) -> tuple[MarketListing, bool]:
+    identity_key = canonical_identity_key(
+        data.item.market_hash_name,
+        data.item.paint_index,
+        data.item.doppler_phase,
+    )
+    canonical_item = session.scalar(
+        select(CanonicalItem).where(
+            CanonicalItem.mode == mode,
+            CanonicalItem.identity_key == identity_key,
+        )
+    )
+    if canonical_item is None:
+        canonical_item = CanonicalItem(
+            mode=mode,
+            identity_key=identity_key,
+            market_hash_name=data.item.market_hash_name,
+            paint_index=data.item.paint_index,
+            variant=data.item.doppler_phase,
+        )
+        session.add(canonical_item)
+        session.flush()
     item = session.scalar(
         select(CS2Item).where(
             CS2Item.mode == mode,
@@ -42,6 +64,7 @@ def store_listing(
     if item is None:
         item = CS2Item(mode=mode, platform=platform, external_id=data.external_id)
         session.add(item)
+    item.canonical_item_id = canonical_item.id
     for name, value in data.item.model_dump(exclude={"stickers"}).items():
         setattr(item, name, value)
     item.stickers = [ItemSticker(**sticker.model_dump()) for sticker in data.item.stickers]
@@ -60,6 +83,7 @@ def store_listing(
             platform=platform,
             external_id=data.external_id,
             item_id=item.id,
+            first_seen_at=data.observed_at,
         )
         session.add(listing)
     listing.price_original = data.price
