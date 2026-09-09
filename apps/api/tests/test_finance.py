@@ -6,7 +6,15 @@ import pytest
 from app.core.config import Settings
 from app.currencies.service import normalize_price
 from app.pricing.comparison import float_score, summarize
-from app.pricing.finance import ExchangeRate, ProfitInput, calculate_profit, effective_purchase_cost
+from app.pricing.finance import (
+    ExchangeRate,
+    ProfitInput,
+    PurchaseCostInput,
+    SaleRevenueInput,
+    calculate_net_profit,
+    calculate_profit,
+    effective_purchase_cost,
+)
 from app.pricing.opportunity import (
     OpportunityComponents,
     OpportunityWeights,
@@ -35,6 +43,32 @@ def test_profit_includes_every_fee_and_roi_uses_total_cost() -> None:
 
 def test_zero_cost_has_no_roi() -> None:
     assert calculate_profit(ProfitInput(Decimal(0), Decimal(0))).roi is None
+
+
+def test_net_profit_exposes_purchase_and_sale_breakdowns() -> None:
+    result = calculate_net_profit(
+        PurchaseCostInput(
+            item_price_eur=Decimal("100"),
+            purchase_fee_eur=Decimal("2"),
+            payment_fee_eur=Decimal("1"),
+            fx_fee_eur=Decimal("3"),
+            deposit_fee_eur=Decimal("4"),
+            trade_fee_eur=Decimal("5"),
+        ),
+        SaleRevenueInput(
+            estimated_sale_price_eur=Decimal("150"),
+            sale_fee_eur=Decimal("7"),
+            withdrawal_fee_eur=Decimal("2"),
+            fx_fee_eur=Decimal("1"),
+            trade_fee_eur=Decimal("0.50"),
+        ),
+        estimated_holding_days=5,
+    )
+    assert result.purchase.total_cost_eur == Decimal("115")
+    assert result.sale.net_revenue_eur == Decimal("139.50")
+    assert result.net_profit_eur == Decimal("24.50")
+    assert result.roi_percent == Decimal("24.50") / Decimal("115") * Decimal("100")
+    assert result.roi_per_day_percent == result.roi_percent / Decimal(5)
 
 
 def test_effective_fx_rejects_reference_rate_and_stale_rate() -> None:

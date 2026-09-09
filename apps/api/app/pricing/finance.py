@@ -51,6 +51,55 @@ class ProfitResult:
     roi: Decimal | None
 
 
+@dataclass(frozen=True)
+class PurchaseCostInput:
+    item_price_eur: Decimal
+    purchase_fee_eur: Decimal = ZERO
+    payment_fee_eur: Decimal = ZERO
+    fx_fee_eur: Decimal = ZERO
+    deposit_fee_eur: Decimal = ZERO
+    trade_fee_eur: Decimal = ZERO
+
+
+@dataclass(frozen=True)
+class PurchaseCostBreakdown:
+    item_price_eur: Decimal
+    purchase_fee_eur: Decimal
+    payment_fee_eur: Decimal
+    fx_fee_eur: Decimal
+    deposit_fee_eur: Decimal
+    trade_fee_eur: Decimal
+    total_cost_eur: Decimal
+
+
+@dataclass(frozen=True)
+class SaleRevenueInput:
+    estimated_sale_price_eur: Decimal
+    sale_fee_eur: Decimal = ZERO
+    withdrawal_fee_eur: Decimal = ZERO
+    fx_fee_eur: Decimal = ZERO
+    trade_fee_eur: Decimal = ZERO
+
+
+@dataclass(frozen=True)
+class SaleRevenueBreakdown:
+    estimated_sale_price_eur: Decimal
+    sale_fee_eur: Decimal
+    withdrawal_fee_eur: Decimal
+    fx_fee_eur: Decimal
+    trade_fee_eur: Decimal
+    net_revenue_eur: Decimal
+
+
+@dataclass(frozen=True)
+class NetProfitResult:
+    purchase: PurchaseCostBreakdown
+    sale: SaleRevenueBreakdown
+    net_profit_eur: Decimal
+    roi_percent: Decimal | None
+    roi_per_day_percent: Decimal | None
+
+
 def calculate_profit(values: ProfitInput) -> ProfitResult:
     """Tous les montants sont déjà exprimés dans la même devise comptable."""
     for name in values.__dataclass_fields__:
@@ -65,6 +114,45 @@ def calculate_profit(values: ProfitInput) -> ProfitResult:
     revenue = values.sale_price - values.sale_fee - values.withdrawal_fee
     profit = revenue - total
     return ProfitResult(total, revenue, profit, profit / total * HUNDRED if total else None)
+
+
+def calculate_purchase_cost(values: PurchaseCostInput) -> PurchaseCostBreakdown:
+    for name in values.__dataclass_fields__:
+        non_negative(getattr(values, name), name)
+    total = sum((getattr(values, name) for name in values.__dataclass_fields__), ZERO)
+    return PurchaseCostBreakdown(**values.__dict__, total_cost_eur=total)
+
+
+def calculate_sale_revenue(values: SaleRevenueInput) -> SaleRevenueBreakdown:
+    for name in values.__dataclass_fields__:
+        non_negative(getattr(values, name), name)
+    deductions = (
+        values.sale_fee_eur + values.withdrawal_fee_eur + values.fx_fee_eur + values.trade_fee_eur
+    )
+    return SaleRevenueBreakdown(
+        **values.__dict__,
+        net_revenue_eur=values.estimated_sale_price_eur - deductions,
+    )
+
+
+def calculate_net_profit(
+    purchase_input: PurchaseCostInput,
+    sale_input: SaleRevenueInput,
+    *,
+    estimated_holding_days: int | None = None,
+) -> NetProfitResult:
+    if estimated_holding_days is not None and estimated_holding_days < 0:
+        raise ValueError("La durée de détention doit être positive ou nulle.")
+    purchase = calculate_purchase_cost(purchase_input)
+    sale = calculate_sale_revenue(sale_input)
+    profit = sale.net_revenue_eur - purchase.total_cost_eur
+    roi = profit / purchase.total_cost_eur * HUNDRED if purchase.total_cost_eur != ZERO else None
+    roi_per_day = (
+        roi / estimated_holding_days
+        if roi is not None and estimated_holding_days is not None and estimated_holding_days > 0
+        else None
+    )
+    return NetProfitResult(purchase, sale, profit, roi, roi_per_day)
 
 
 @dataclass(frozen=True)

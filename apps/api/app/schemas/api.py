@@ -31,6 +31,7 @@ HealthAvailability = Literal["healthy", "unavailable", "unknown"]
 Freshness = Literal["fresh", "stale", "very_stale", "unknown"]
 LiquidityCategory = Literal["VERY_LOW", "LOW", "MEDIUM", "HIGH", "VERY_HIGH"]
 Money = Annotated[Decimal, Field(ge=0, allow_inf_nan=False, max_digits=20, decimal_places=8)]
+FeeType = Literal["BUY", "SELL", "DEPOSIT", "WITHDRAW", "TRADE", "PAYMENT", "FX"]
 
 
 class Sticker(BaseModel):
@@ -242,3 +243,74 @@ class ProfitResponse(BaseModel):
     net_profit: Decimal
     roi: Decimal | None
     warning: str = "Simulation EUR basée uniquement sur les montants de frais fournis."
+
+
+class PurchaseCostRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    item_price_eur: Money
+    purchase_fee_eur: Money = Decimal(0)
+    payment_fee_eur: Money = Decimal(0)
+    fx_fee_eur: Money = Decimal(0)
+    deposit_fee_eur: Money = Decimal(0)
+    trade_fee_eur: Money = Decimal(0)
+
+
+class SaleRevenueRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    estimated_sale_price_eur: Money
+    sale_fee_eur: Money = Decimal(0)
+    withdrawal_fee_eur: Money = Decimal(0)
+    fx_fee_eur: Money = Decimal(0)
+    trade_fee_eur: Money = Decimal(0)
+
+
+class NetProfitRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    purchase: PurchaseCostRequest
+    sale: SaleRevenueRequest
+    estimated_holding_days: int | None = Field(default=None, ge=0)
+
+
+class PurchaseCostResponse(PurchaseCostRequest):
+    total_cost_eur: Decimal
+
+
+class SaleRevenueResponse(SaleRevenueRequest):
+    net_revenue_eur: Decimal
+
+
+class NetProfitResponse(BaseModel):
+    purchase: PurchaseCostResponse
+    sale: SaleRevenueResponse
+    net_profit_eur: Decimal
+    roi_percent: Decimal | None
+    roi_per_day_percent: Decimal | None
+    warning: str = (
+        "Simulation EUR : les montants fournis doivent provenir de taux et frais vérifiés."
+    )
+
+
+class FeeQuoteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    platform: str = Field(min_length=1, max_length=32)
+    fee_type: FeeType
+    base_amount: Money
+    currency: str = Field(pattern=r"^[A-Z]{3}$")
+    item_name: str | None = Field(default=None, max_length=512)
+
+
+class FeeQuoteResponse(BaseModel):
+    known: bool
+    platform: str
+    fee_type: FeeType
+    base_amount: Decimal
+    fee_amount: Decimal | None = None
+    currency: str
+    rate: Decimal | None = None
+    fixed_amount: Decimal | None = None
+    minimum_fee: Decimal | None = None
+    minimum_applied: bool = False
+    applies_to: str | None = None
+    source: str | None = None
+    verified_at: datetime | None = None
+    warning: str | None = None

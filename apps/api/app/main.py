@@ -15,20 +15,31 @@ from app.currencies.scheduler import FXRateScheduler
 from app.currencies.service import build_fx_status
 from app.db.session import build_engine, build_session_factory
 from app.markets.registry import source_catalog
-from app.pricing.finance import ProfitInput, calculate_profit
+from app.pricing.finance import (
+    ProfitInput,
+    PurchaseCostInput,
+    SaleRevenueInput,
+    calculate_net_profit,
+    calculate_profit,
+)
 from app.schemas.api import (
     Dashboard,
+    FeeQuoteRequest,
+    FeeQuoteResponse,
     FXStatus,
     IntegrationCatalog,
     ItemDetail,
     MarketMonitor,
     Mode,
+    NetProfitRequest,
+    NetProfitResponse,
     ProfitRequest,
     ProfitResponse,
     SystemHealth,
 )
 from app.services.analysis import build_dashboard, build_item_detail, market_statuses
 from app.services.demo import ensure_demo
+from app.services.fees import calculate_stored_fee
 from app.services.health import system_health
 from app.services.monitoring import build_market_monitor
 from app.services.scheduler import MarketSyncScheduler
@@ -214,3 +225,34 @@ def item_detail(
 def profit(payload: ProfitRequest) -> ProfitResponse:
     result = calculate_profit(ProfitInput(**payload.model_dump()))
     return ProfitResponse(**result.__dict__)
+
+
+@app.post("/api/calculations/net-profit", response_model=NetProfitResponse, tags=["calculations"])
+def net_profit(payload: NetProfitRequest) -> NetProfitResponse:
+    result = calculate_net_profit(
+        PurchaseCostInput(**payload.purchase.model_dump()),
+        SaleRevenueInput(**payload.sale.model_dump()),
+        estimated_holding_days=payload.estimated_holding_days,
+    )
+    return NetProfitResponse(
+        purchase=result.purchase.__dict__,
+        sale=result.sale.__dict__,
+        net_profit_eur=result.net_profit_eur,
+        roi_percent=result.roi_percent,
+        roi_per_day_percent=result.roi_per_day_percent,
+    )
+
+
+@app.post("/api/calculations/fee", response_model=FeeQuoteResponse, tags=["calculations"])
+def fee_quote(payload: FeeQuoteRequest, session: DbSession) -> FeeQuoteResponse:
+    result = calculate_stored_fee(session, **payload.model_dump())
+    if result is None:
+        return FeeQuoteResponse(
+            known=False,
+            platform=payload.platform,
+            fee_type=payload.fee_type,
+            base_amount=payload.base_amount,
+            currency=payload.currency,
+            warning="Aucun barème officiel applicable : frais laissés inconnus.",
+        )
+    return FeeQuoteResponse(known=True, **result.__dict__)

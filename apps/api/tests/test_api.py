@@ -43,6 +43,29 @@ def test_health_demo_and_live_are_isolated(tmp_path, monkeypatch) -> None:
             ecb = next(source for source in catalog if source["id"] == "ecb")
             assert ecb["configured"] is True
             assert ecb["runtime_status"] == "disabled"
+            net_profit = client.post(
+                "/api/calculations/net-profit",
+                json={
+                    "purchase": {"item_price_eur": "100", "payment_fee_eur": "2"},
+                    "sale": {"estimated_sale_price_eur": "130", "sale_fee_eur": "5"},
+                    "estimated_holding_days": 5,
+                },
+            )
+            assert net_profit.status_code == 200
+            assert Decimal(net_profit.json()["net_profit_eur"]) == Decimal("23")
+            assert Decimal(net_profit.json()["purchase"]["total_cost_eur"]) == Decimal("102")
+            unknown_fee = client.post(
+                "/api/calculations/fee",
+                json={
+                    "platform": "skinport",
+                    "fee_type": "SELL",
+                    "base_amount": "100",
+                    "currency": "EUR",
+                },
+            )
+            assert unknown_fee.status_code == 200
+            assert unknown_fee.json()["known"] is False
+            assert unknown_fee.json()["fee_amount"] is None
             live = client.get("/api/dashboard?mode=live")
             assert live.status_code == 200
             assert live.json()["listings"] == []
