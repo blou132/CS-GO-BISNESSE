@@ -34,7 +34,9 @@ class Settings(BaseSettings):
     fx_usd_eur_rate: Decimal | None = Field(default=None, gt=0, allow_inf_nan=False)
     fx_rate_source: str | None = None
     fx_rate_timestamp: datetime | None = None
-    fx_max_age_hours: int = Field(default=72, ge=1, le=720)
+    fx_max_age_hours: int = Field(default=120, ge=1, le=720)
+    fx_reference_sync_enabled: bool = False
+    fx_reference_sync_interval_seconds: int = Field(default=21600, ge=3600, le=86400)
 
     @model_validator(mode="after")
     def validate_runtime(self) -> Self:

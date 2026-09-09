@@ -82,6 +82,8 @@ Toutes les variables sont décrites dans [.env.example](.env.example).
 | `FX_USD_EUR_RATE` | Facultative | EUR pour 1 USD, taux de référence |
 | `FX_RATE_SOURCE` | Avec taux FX | Source explicite du taux |
 | `FX_RATE_TIMESTAMP` | Avec taux FX | Date ISO 8601 avec fuseau |
+| `FX_REFERENCE_SYNC_ENABLED` | Facultative | Collecte read-only des taux BCE quotidiens |
+| `FX_REFERENCE_SYNC_INTERVAL_SECONDS` | Facultative | Intervalle de vérification BCE, 6 heures par défaut |
 | `API_BASE_URL` | Frontend | Adresse privée du backend |
 | `ADMIN_USERNAME` | Frontend | Identifiant de l'administrateur unique |
 | `ADMIN_PASSWORD_HASH` | Frontend | Hash Scrypt généré par le script du projet |

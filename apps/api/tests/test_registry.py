@@ -26,9 +26,11 @@ def test_catalog_reports_configuration_without_exposing_secrets() -> None:
         message="ok",
     )
 
-    catalog = {row["id"]: row for row in source_catalog(settings, [skinport])}
+    catalog = {row["id"]: row for row in source_catalog(settings, [skinport], {"ecb": "online"})}
 
     assert catalog["csfloat"]["configured"] is True
     assert catalog["dmarket"]["configured"] is False
     assert catalog["skinport"]["runtime_status"] == "online"
+    assert catalog["ecb"]["configured"] is True
+    assert catalog["ecb"]["runtime_status"] == "online"
     assert "private-value" not in repr(catalog)

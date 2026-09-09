@@ -35,6 +35,14 @@ def test_health_demo_and_live_are_isolated(tmp_path, monkeypatch) -> None:
             assert monitor.status_code == 200
             assert monitor.json()["sync_enabled"] is False
             assert monitor.json()["metrics"]["active_listings"] == 0
+            fx = client.get("/api/fx")
+            assert fx.status_code == 200
+            assert fx.json()["runtime_status"] == "disabled"
+            assert fx.json()["rates"] == []
+            catalog = client.get("/api/integrations").json()["sources"]
+            ecb = next(source for source in catalog if source["id"] == "ecb")
+            assert ecb["configured"] is True
+            assert ecb["runtime_status"] == "disabled"
             live = client.get("/api/dashboard?mode=live")
             assert live.status_code == 200
             assert live.json()["listings"] == []

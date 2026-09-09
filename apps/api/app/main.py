@@ -11,11 +11,14 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
+from app.currencies.scheduler import FXRateScheduler
+from app.currencies.service import build_fx_status
 from app.db.session import build_engine, build_session_factory
 from app.markets.registry import source_catalog
 from app.pricing.finance import ProfitInput, calculate_profit
 from app.schemas.api import (
     Dashboard,
+    FXStatus,
     IntegrationCatalog,
     ItemDetail,
     MarketMonitor,
@@ -55,10 +58,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         settings,
         app.state.sync_coordinator,
     )
+    app.state.fx_scheduler = FXRateScheduler(app.state.sessions, settings)
     await app.state.market_scheduler.start()
+    await app.state.fx_scheduler.start()
     try:
         yield
     finally:
+        await app.state.fx_scheduler.stop()
         await app.state.market_scheduler.stop()
         await close_adapters(app.state.adapters)
         engine.dispose()
@@ -169,10 +175,24 @@ def market_monitor(request: Request, session: DbSession, settings: SettingsDep) 
 
 @app.get("/api/integrations", response_model=IntegrationCatalog, tags=["analysis"])
 def integrations(session: DbSession, settings: SettingsDep) -> IntegrationCatalog:
+    fx_scheduler = getattr(app.state, "fx_scheduler", None)
     return IntegrationCatalog(
-        sources=source_catalog(settings, market_statuses(session, "live", settings)),
+        sources=source_catalog(
+            settings,
+            market_statuses(session, "live", settings),
+            {
+                "ecb": (
+                    str(fx_scheduler.runtime_status) if fx_scheduler is not None else "unavailable"
+                )
+            },
+        ),
         generated_at=datetime.now(UTC),
     )
+
+
+@app.get("/api/fx", response_model=FXStatus, tags=["analysis"])
+def fx_status(request: Request, session: DbSession, settings: SettingsDep) -> FXStatus:
+    return build_fx_status(session, settings, getattr(request.app.state, "fx_scheduler", None))
 
 
 @app.get("/api/items/{listing_id}", response_model=ItemDetail, tags=["analysis"])

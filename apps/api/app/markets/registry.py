@@ -176,13 +176,19 @@ SOURCES: tuple[MarketSource, ...] = (
 )
 
 
-def source_catalog(settings: Settings, statuses: list[MarketStatus]) -> list[dict[str, object]]:
+def source_catalog(
+    settings: Settings,
+    statuses: list[MarketStatus],
+    reference_runtime: dict[str, str] | None = None,
+) -> list[dict[str, object]]:
     runtime: dict[str, str] = {status.platform: status.status for status in statuses}
+    runtime.update(reference_runtime or {})
     configured = {
         "csfloat": settings.csfloat_api_key is not None,
         "skinport": True,
         "dmarket": settings.dmarket_public_key is not None
         and settings.dmarket_secret_key is not None,
+        "ecb": True,
     }
     return [
         {

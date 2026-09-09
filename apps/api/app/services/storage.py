@@ -135,7 +135,7 @@ def store_listing(
         listing.fx_rate,
         listing.fx_rate_timestamp,
         listing.fx_rate_source,
-    ) = normalize_price(data.price, data.currency, settings, datetime.now(UTC))
+    ) = normalize_price(data.price, data.currency, settings, datetime.now(UTC), session)
     return listing, created
 
 
@@ -147,6 +147,7 @@ def _fingerprint(*values: object) -> str:
 
 
 def _normalized_optional(
+    session: Session,
     value: Decimal | None,
     currency: str,
     settings: Settings,
@@ -154,7 +155,7 @@ def _normalized_optional(
 ) -> tuple[Decimal | None, Decimal | None, datetime | None, str | None]:
     if value is None:
         return None, None, None, None
-    return normalize_price(value, currency, settings, now)
+    return normalize_price(value, currency, settings, now, session)
 
 
 def store_aggregate(
@@ -183,7 +184,7 @@ def store_aggregate(
         return False
     now = datetime.now(UTC)
     normalized = [
-        _normalized_optional(value, data.currency, settings, now)
+        _normalized_optional(session, value, data.currency, settings, now)
         for value in (data.min_price, data.max_price, data.avg_price, data.median_price)
     ]
     provenance = next((value for value in normalized if value[1] is not None), (None,) * 4)
@@ -247,7 +248,7 @@ def store_realized_sale(
         else None
     )
     converted, rate, rate_date, source = normalize_price(
-        data.price, data.currency, settings, datetime.now(UTC)
+        data.price, data.currency, settings, datetime.now(UTC), session
     )
     session.add(
         RealizedSale(
@@ -295,7 +296,7 @@ def store_buy_order(
     ):
         return False
     converted, rate, rate_date, source = normalize_price(
-        data.price, data.currency, settings, datetime.now(UTC)
+        data.price, data.currency, settings, datetime.now(UTC), session
     )
     session.add(
         BuyOrderObservation(
@@ -375,6 +376,7 @@ def store_observation(
         data.currency,
         settings,
         datetime.now(UTC),
+        session,
     )
     session.add(
         PriceObservation(

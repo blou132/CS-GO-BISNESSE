@@ -162,6 +162,26 @@ class IntegrationCatalog(BaseModel):
     generated_at: datetime
 
 
+class FXReferenceRate(BaseModel):
+    currency: str
+    currency_per_eur: Decimal
+    eur_per_unit: Decimal
+    source: str
+    observed_at: datetime
+    rate_type: Literal["REFERENCE"] = "REFERENCE"
+
+
+class FXStatus(BaseModel):
+    sync_enabled: bool
+    scheduler_running: bool
+    runtime_status: str
+    last_attempt_at: datetime | None = None
+    last_success_at: datetime | None = None
+    last_error: str | None = None
+    next_run_at: datetime | None = None
+    rates: list[FXReferenceRate] = Field(default_factory=list)
+
+
 class Comparison(BaseModel):
     platform: Platform
     observation_type: str
