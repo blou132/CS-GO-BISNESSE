@@ -65,6 +65,23 @@ export async function proxyIntegrations() {
   }
 }
 
+export async function proxyFx() {
+  try {
+    const upstream = await fetch(new URL("/api/fx", apiBaseUrl()), {
+      cache: "no-store",
+      signal: AbortSignal.timeout(5_000),
+      headers: { Accept: "application/json" },
+    });
+    if (!upstream.ok) {
+      return Response.json({ detail: "Taux de référence indisponibles." }, { status: 502 });
+    }
+    const body: unknown = await upstream.json();
+    return Response.json(body, { headers: { "Cache-Control": "no-store" } });
+  } catch {
+    return Response.json({ detail: "API indisponible." }, { status: 503 });
+  }
+}
+
 export async function proxyApi(request: Request, path: "/api/dashboard" | "/api/sync" | `/api/items/${string}`) {
   const input = new URL(request.url);
   const mode = input.searchParams.get("mode") ?? "live";

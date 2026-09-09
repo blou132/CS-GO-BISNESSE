@@ -38,7 +38,9 @@ export default function MarketsPage() {
     {monitor?.warnings.length ? <div className={`market-limit ${monitorUnavailable ? "alert" : ""}`}><strong>État du monitoring</strong><p>{monitor.warnings.join(" ")}</p></div> : null}
     <section className="stat-grid" aria-label="Métriques du monitoring marché">
       <article className="stat-card"><span>Listings actifs</span><strong>{loading ? "…" : summary.listings.toLocaleString("fr-FR")}</strong><small>{monitor?.metrics.total_listings.toLocaleString("fr-FR") ?? "0"} conservés au total</small></article>
-      <article className="stat-card"><span>Observations de prix</span><strong>{loading ? "…" : summary.observations.toLocaleString("fr-FR")}</strong><small>Historique persisté</small></article>
+      <article className="stat-card"><span>Ventes réalisées</span><strong>{loading ? "…" : (monitor?.metrics.realized_sales ?? 0).toLocaleString("fr-FR")}</strong><small>Transactions identifiables persistées</small></article>
+      <article className="stat-card"><span>Ordres d’achat</span><strong>{loading ? "…" : (monitor?.metrics.buy_order_observations ?? 0).toLocaleString("fr-FR")}</strong><small>Observations de demande persistées</small></article>
+      <article className="stat-card"><span>Agrégats marché</span><strong>{loading ? "…" : (monitor?.metrics.aggregate_market_stats ?? 0).toLocaleString("fr-FR")}</strong><small>{summary.observations.toLocaleString("fr-FR")} observations historiques</small></article>
       <article className="stat-card"><span>Opportunités actives</span><strong>{loading ? "…" : summary.opportunities.toLocaleString("fr-FR")}</strong><small>Scores recalculés après succès</small></article>
       <article className={`stat-card ${summary.syncErrors24h ? "alert" : ""}`}><span>Erreurs 24 h</span><strong>{loading ? "…" : summary.syncErrors24h.toLocaleString("fr-FR")}</strong><small>Dernières tentatives marché</small></article>
     </section>

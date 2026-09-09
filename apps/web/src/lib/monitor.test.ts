@@ -34,8 +34,12 @@ const monitor: MarketMonitorData = {
     total_listings: 20,
     active_listings: 12,
     price_observations: 240,
+    aggregate_market_stats: 18,
+    realized_sales: 4,
+    buy_order_observations: 11,
     active_opportunities: 3,
     sync_errors_24h: 0,
+    average_freshness_seconds: 120,
   },
   warnings: [],
 };

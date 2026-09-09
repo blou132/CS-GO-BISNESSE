@@ -1,5 +1,6 @@
 export type Mode = "live" | "demo";
 export type Platform = "csfloat" | "skinport" | "dmarket";
+export type LiquidityCategory = "VERY_LOW" | "LOW" | "MEDIUM" | "HIGH" | "VERY_HIGH";
 
 export interface Sticker {
   name: string;
@@ -33,7 +34,16 @@ export interface ScannerRow {
   opportunity_score: number | null;
   float_score: number | null;
   liquidity: number | null;
+  liquidity_category: LiquidityCategory | null;
+  liquidity_evidence_completeness: number | null;
   confidence: number | null;
+  reference_method: string | null;
+  reference_sources: string[];
+  reference_calculated_at: string | null;
+  spread_eur: string | null;
+  spread_percent: string | null;
+  risk_score: number | null;
+  risk_factors: string[];
   stickers: Sticker[];
   warnings: string[];
 }
@@ -86,8 +96,12 @@ export interface MarketMetrics {
   total_listings: number;
   active_listings: number;
   price_observations: number;
+  aggregate_market_stats: number;
+  realized_sales: number;
+  buy_order_observations: number;
   active_opportunities: number;
   sync_errors_24h: number;
+  average_freshness_seconds: number | null;
 }
 
 export interface MarketMonitorData {
@@ -120,6 +134,26 @@ export interface IntegrationCatalog {
   generated_at: string;
 }
 
+export interface FXReferenceRate {
+  currency: string;
+  currency_per_eur: string;
+  eur_per_unit: string;
+  source: string;
+  observed_at: string;
+  rate_type: "REFERENCE";
+}
+
+export interface FXStatus {
+  sync_enabled: boolean;
+  scheduler_running: boolean;
+  runtime_status: string;
+  last_attempt_at: string | null;
+  last_success_at: string | null;
+  last_error: string | null;
+  next_run_at: string | null;
+  rates: FXReferenceRate[];
+}
+
 export interface Comparison {
   platform: Platform;
   observation_type: string;
@@ -140,10 +174,23 @@ export interface Observation {
   volume: number | null;
 }
 
+export interface CurrentMarketSnapshot {
+  platform: Platform;
+  ask_eur: string | null;
+  bid_eur: string | null;
+  median_7d_eur: string | null;
+  median_30d_eur: string | null;
+  volume_30d: number | null;
+  currencies: string[];
+  freshest_at: string | null;
+  freshness: "fresh" | "stale" | "very_stale" | "unknown";
+}
+
 export interface ItemData {
   mode: Mode;
   item: ScannerRow;
   comparisons: Comparison[];
+  market_snapshots: CurrentMarketSnapshot[];
   history: Observation[];
   warnings: string[];
 }

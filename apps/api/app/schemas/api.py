@@ -129,8 +129,12 @@ class MarketMetrics(BaseModel):
     total_listings: int
     active_listings: int
     price_observations: int
+    aggregate_market_stats: int
+    realized_sales: int
+    buy_order_observations: int
     active_opportunities: int
     sync_errors_24h: int
+    average_freshness_seconds: int | None = None
 
 
 class MarketMonitor(BaseModel):

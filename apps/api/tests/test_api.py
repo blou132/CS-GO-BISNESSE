@@ -35,6 +35,8 @@ def test_health_demo_and_live_are_isolated(tmp_path, monkeypatch) -> None:
             assert monitor.status_code == 200
             assert monitor.json()["sync_enabled"] is False
             assert monitor.json()["metrics"]["active_listings"] == 0
+            assert monitor.json()["metrics"]["realized_sales"] == 0
+            assert monitor.json()["metrics"]["buy_order_observations"] == 0
             fx = client.get("/api/fx")
             assert fx.status_code == 200
             assert fx.json()["runtime_status"] == "disabled"

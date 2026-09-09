@@ -5,8 +5,16 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.models import MarketListing, MarketOpportunity, MarketSyncState, PriceObservation
-from app.schemas.api import MarketMetrics, MarketMonitor
+from app.models import (
+    AggregateMarketStat,
+    BuyOrderObservation,
+    MarketListing,
+    MarketOpportunity,
+    MarketSyncState,
+    PriceObservation,
+    RealizedSale,
+)
+from app.schemas.api import MarketMetrics, MarketMonitor, MarketStatus
 from app.services.analysis import market_statuses
 
 
@@ -36,14 +44,22 @@ def build_market_monitor(
         sync_query_configured=bool(settings.market_sync_query.strip()),
         scheduler_running=scheduler_running,
         platforms=statuses,
-        metrics=_metrics(session, "live"),
+        metrics=_metrics(session, "live", statuses),
         warnings=warnings,
     )
 
 
-def _metrics(session: Session, mode: str) -> MarketMetrics:
+def _metrics(session: Session, mode: str, statuses: list[MarketStatus]) -> MarketMetrics:
     now = datetime.now(UTC)
     day_ago = now - timedelta(hours=24)
+    success_times = [
+        _aware(status.last_success_at) for status in statuses if status.last_success_at is not None
+    ]
+    average_freshness = (
+        round(sum((now - value).total_seconds() for value in success_times) / len(success_times))
+        if success_times
+        else None
+    )
     return MarketMetrics(
         total_listings=_count(
             session,
@@ -58,6 +74,22 @@ def _metrics(session: Session, mode: str) -> MarketMetrics:
         price_observations=_count(
             session,
             select(func.count()).select_from(PriceObservation).where(PriceObservation.mode == mode),
+        ),
+        aggregate_market_stats=_count(
+            session,
+            select(func.count())
+            .select_from(AggregateMarketStat)
+            .where(AggregateMarketStat.mode == mode),
+        ),
+        realized_sales=_count(
+            session,
+            select(func.count()).select_from(RealizedSale).where(RealizedSale.mode == mode),
+        ),
+        buy_order_observations=_count(
+            session,
+            select(func.count())
+            .select_from(BuyOrderObservation)
+            .where(BuyOrderObservation.mode == mode),
         ),
         active_opportunities=_count(
             session,
@@ -77,9 +109,14 @@ def _metrics(session: Session, mode: str) -> MarketMetrics:
                 ),
             ),
         ),
+        average_freshness_seconds=average_freshness,
     )
 
 
 def _count(session: Session, statement: Any) -> int:
     value = session.scalar(statement)
     return int(value or 0)
+
+
+def _aware(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)

@@ -36,11 +36,16 @@ export default function ScannerPage() {
         <Input label="Profit min. EUR" type="number" value={filters.minProfit} onChange={(value) => set("minProfit", value)} />
         <Input label="ROI min. %" type="number" value={filters.minRoi} onChange={(value) => set("minRoi", value)} />
         <Input label="Float max." type="number" value={filters.maxFloat} onChange={(value) => set("maxFloat", value)} />
+        <Input label="Paint seed" type="number" value={filters.paintSeed} onChange={(value) => set("paintSeed", value)} />
         <Input label="Score min." type="number" value={filters.minScore} onChange={(value) => set("minScore", value)} />
+        <Input label="Liquidité min." type="number" value={filters.minLiquidity} onChange={(value) => set("minLiquidity", value)} />
+        <Input label="Confiance min." type="number" value={filters.minConfidence} onChange={(value) => set("minConfidence", value)} />
+        <Input label="Risque max." type="number" value={filters.maxRisk} onChange={(value) => set("maxRisk", value)} />
+        <Input label="Spread max. %" type="number" value={filters.maxSpread} onChange={(value) => set("maxSpread", value)} />
       </div>
     </section>
     <section className="panel">
-      <div className="panel-heading"><div><span className="eyebrow">RÉSULTATS NORMALISÉS</span><h2>Observations disponibles</h2></div><label className="sort-control"><span>Trier par</span><select value={sort} onChange={(event) => setSort(event.target.value as Sort)}><option value="opportunity">Meilleure opportunité</option><option value="roi">ROI le plus élevé</option><option value="profit">Profit le plus élevé</option><option value="price">Prix le plus bas</option><option value="float">Float le plus bas</option><option value="liquidity">Plus liquide</option></select></label></div>
+      <div className="panel-heading"><div><span className="eyebrow">RÉSULTATS NORMALISÉS</span><h2>Observations disponibles</h2></div><label className="sort-control"><span>Trier par</span><select value={sort} onChange={(event) => setSort(event.target.value as Sort)}><option value="opportunity">Meilleure opportunité</option><option value="profit">Profit le plus élevé</option><option value="roi">ROI le plus élevé</option><option value="risk">Risque le plus bas</option><option value="liquidity">Plus liquide</option><option value="confidence">Confiance la plus haute</option><option value="price">Prix le plus bas</option><option value="float">Float le plus bas</option><option value="spread">Spread le plus bas</option><option value="discount">Plus gros discount</option><option value="recent">Plus récent</option></select></label></div>
       {loading && !data ? <LoadingState /> : filtered.length ? <ListingsTable rows={filtered} /> : <EmptyState filtered={rows.length > 0} />}
     </section>
     <DataPrinciple />
