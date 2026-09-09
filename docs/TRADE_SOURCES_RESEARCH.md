@@ -14,3 +14,21 @@ prendre une décision d'intégration.
 « Non publiée » signifie qu'aucun contrat développeur public n'a été trouvé;
 cela ne constitue pas une preuve d'inexistence d'une API privée ou partenaire.
 Le projet n'utilise aucun scraping, cookie Steam, endpoint privé ou transaction.
+
+## Fondation TradeQuote
+
+Le moteur `pricing/trades.py` accepte des quotes déjà obtenues par une source
+autorisée. Il sépare pour chaque côté les crédits affichés par la plateforme et
+la valeur cash EUR issue du Price Engine. Il calcule uniquement lorsque toutes
+les valorisations nécessaires sont connues :
+
+- valeur cash donnée et reçue ;
+- frais explicites ;
+- différence cash nette ;
+- ratio cash reçu/donné ;
+- spread effectif ;
+- confiance bornée par la qualité de la source et des valorisations.
+
+Une valorisation partielle n'est jamais additionnée comme si elle était
+complète. Aucun provider live ni endpoint d'exécution n'est déclaré tant qu'un
+contrat officiel read-only n'est pas disponible.
