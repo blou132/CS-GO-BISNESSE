@@ -12,6 +12,11 @@ emploie son inverse. Les taux sont persistés comme `REFERENCE` et ne sont jamai
 présentés comme le taux réellement payé. Un taux `EFFECTIVE` devra provenir
 d'une transaction ou d'un relevé réel et reste séparé.
 
+Compose transmet `FX_REFERENCE_SYNC_ENABLED` (false par défaut),
+`FX_REFERENCE_SYNC_INTERVAL_SECONDS` (21600) et `FX_MAX_AGE_HOURS` (120).
+Activer la collecte demande une modification explicite de l'environnement
+d'exploitation et une recréation de l'API par le workflow habituel.
+
 ## Frais
 
 `FeeRule` et `PlatformFeeSchedule` acceptent les types `BUY`, `SELL`, `DEPOSIT`,

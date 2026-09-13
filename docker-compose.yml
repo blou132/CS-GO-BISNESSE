@@ -41,7 +41,9 @@ services:
       FX_USD_EUR_RATE: ${FX_USD_EUR_RATE:-}
       FX_RATE_SOURCE: ${FX_RATE_SOURCE:-}
       FX_RATE_TIMESTAMP: ${FX_RATE_TIMESTAMP:-}
-      FX_MAX_AGE_HOURS: ${FX_MAX_AGE_HOURS:-72}
+      FX_MAX_AGE_HOURS: ${FX_MAX_AGE_HOURS:-120}
+      FX_REFERENCE_SYNC_ENABLED: ${FX_REFERENCE_SYNC_ENABLED:-false}
+      FX_REFERENCE_SYNC_INTERVAL_SECONDS: ${FX_REFERENCE_SYNC_INTERVAL_SECONDS:-21600}
     command: [sh, -c, 'alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000']
     ports:
       - '127.0.0.1:8000:8000'

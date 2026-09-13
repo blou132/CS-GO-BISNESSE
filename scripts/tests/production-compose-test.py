@@ -1,6 +1,7 @@
 """Validate safety properties of the fully merged production Compose model."""
 
 import json
+import os
 import sys
 
 
@@ -53,6 +54,17 @@ def main() -> None:
     assert "/app/.next/cache:size=64m,uid=1000,gid=1000,mode=0755" in services["web"][
         "tmpfs"
     ]
+
+    api_environment = services["api"]["environment"]
+    assert api_environment["FX_MAX_AGE_HOURS"] == "120"
+    assert api_environment["FX_REFERENCE_SYNC_ENABLED"] == os.environ.get(
+        "FX_REFERENCE_SYNC_ENABLED", "false"
+    )
+    assert api_environment["FX_REFERENCE_SYNC_INTERVAL_SECONDS"] == os.environ.get(
+        "FX_REFERENCE_SYNC_INTERVAL_SECONDS", "21600"
+    )
+    for name in ("ADMIN_USERNAME", "ADMIN_PASSWORD_HASH", "SESSION_SECRET"):
+        assert services["web"]["environment"][name]
 
     print("Configuration Compose de production conforme.")
 
