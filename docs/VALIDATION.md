@@ -1,5 +1,8 @@
 # Validation — 7 septembre 2026
 
+Rapport plus récent : [passe data, scanner et watchlist du 13 septembre](DATA_MARKETS_REPORT_2026-09-13.md).
+Le présent document conserve les preuves historiques de la première mise en service.
+
 ## Environnement de contrôle
 
 - hôte Linux `serve-projet` ;
