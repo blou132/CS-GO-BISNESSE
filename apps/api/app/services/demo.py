@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.markets.base import AdapterItem, AdapterListing, AdapterObservation, AdapterResult
-from app.models import MarketListing, MarketSyncState
+from app.models import ListingAnalysisSnapshot, MarketListing, MarketSyncState
 from app.services.analysis import refresh_opportunities
 from app.services.storage import persist_result
 
@@ -26,7 +26,16 @@ DEMO_SKINS = [
 
 
 def ensure_demo(session: Session, settings: Settings) -> None:
-    if session.scalar(select(MarketListing.id).where(MarketListing.mode == "demo").limit(1)):
+    demo_listing = session.scalar(
+        select(MarketListing.id).where(MarketListing.mode == "demo").limit(1)
+    )
+    if demo_listing and session.scalar(
+        select(ListingAnalysisSnapshot.id).where(ListingAnalysisSnapshot.mode == "demo").limit(1)
+    ):
+        return
+    if demo_listing:
+        refresh_opportunities(session, "demo", settings)
+        session.commit()
         return
     now = datetime.now(UTC)
     for index, platform in enumerate(("csfloat", "dmarket")):

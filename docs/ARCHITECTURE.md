@@ -66,7 +66,13 @@ pour inventer un état `SOLD`. Les observations de prix conservent plateforme,
 objet, prix/devise, référence EUR facultative, type et timestamp. Une fenêtre
 de déduplication limite les observations `LISTING` identiques trop rapprochées.
 Après une synchronisation réussie, les opportunités calculables sont
-recalculées et persistées.
+recalculées et persistées. Un snapshot d'analyse nullable est aussi conservé
+pour chaque annonce, y compris lorsque le profit réel reste inconnu.
+
+`GET /api/scanner` applique filtres, tri, comptage et pagination dans
+PostgreSQL. Les pages contiennent au plus 100 annonces et les facettes sont
+calculées séparément. Le dashboard est limité aux 100 annonces récentes : le
+navigateur ne reçoit jamais l'ensemble de la table pour filtrer localement.
 
 Les endpoints sont en lecture/analyse : la synchronisation écrit des
 observations dans notre base mais n'achète rien sur les marketplaces.

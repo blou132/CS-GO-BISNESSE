@@ -13,6 +13,7 @@ from app.models import (
     AggregateMarketStat,
     BuyOrderObservation,
     CS2Item,
+    ListingAnalysisSnapshot,
     MarketListing,
     MarketOpportunity,
     MarketSyncState,
@@ -56,6 +57,7 @@ INTEGRATION_STATUS: dict[Platform, IntegrationStatus] = {
     "dmarket": "OFFICIAL_API",
 }
 DEMO_SALE_FEE_RATE = Decimal("0.10")
+MAX_DASHBOARD_LISTINGS = 100
 
 
 @dataclass(frozen=True)
@@ -186,40 +188,71 @@ def _analyse(
     )
 
 
-def _load(session: Session, mode: Mode) -> MarketData:
-    listings = list(
-        session.scalars(
-            select(MarketListing)
-            .where(MarketListing.mode == mode, MarketListing.status == "ACTIVE")
-            .options(selectinload(MarketListing.item).selectinload(CS2Item.stickers))
-            .order_by(MarketListing.observed_at.desc(), MarketListing.id)
-        )
+def _load_listings(
+    session: Session,
+    mode: Mode,
+    *,
+    listing_limit: int | None = None,
+    market_hash_names: set[str] | None = None,
+) -> list[MarketListing]:
+    listing_query = (
+        select(MarketListing)
+        .join(CS2Item, MarketListing.item_id == CS2Item.id)
+        .where(MarketListing.mode == mode, MarketListing.status == "ACTIVE")
+        .options(selectinload(MarketListing.item).selectinload(CS2Item.stickers))
+        .order_by(MarketListing.observed_at.desc(), MarketListing.id)
     )
+    if market_hash_names is not None:
+        listing_query = listing_query.where(CS2Item.market_hash_name.in_(market_hash_names))
+    if listing_limit is not None:
+        listing_query = listing_query.limit(listing_limit)
+    return list(session.scalars(listing_query))
+
+
+def _load(
+    session: Session,
+    mode: Mode,
+    *,
+    market_hash_names: set[str] | None = None,
+) -> MarketData:
+    listings = _load_listings(session, mode, market_hash_names=market_hash_names)
+    names = {listing.item.market_hash_name for listing in listings}
+    if not names:
+        return MarketData([], [], [], [], [])
     observations = list(
         session.scalars(
             select(PriceObservation)
-            .where(PriceObservation.mode == mode)
+            .where(
+                PriceObservation.mode == mode,
+                PriceObservation.market_hash_name.in_(names),
+            )
             .order_by(PriceObservation.timestamp.desc())
         )
     )
     aggregates = list(
         session.scalars(
             select(AggregateMarketStat)
-            .where(AggregateMarketStat.mode == mode)
+            .where(
+                AggregateMarketStat.mode == mode,
+                AggregateMarketStat.market_hash_name.in_(names),
+            )
             .order_by(AggregateMarketStat.observed_at.desc())
         )
     )
     realized_sales = list(
         session.scalars(
             select(RealizedSale)
-            .where(RealizedSale.mode == mode)
+            .where(RealizedSale.mode == mode, RealizedSale.market_hash_name.in_(names))
             .order_by(RealizedSale.sold_at.desc())
         )
     )
     buy_orders = list(
         session.scalars(
             select(BuyOrderObservation)
-            .where(BuyOrderObservation.mode == mode)
+            .where(
+                BuyOrderObservation.mode == mode,
+                BuyOrderObservation.market_hash_name.in_(names),
+            )
             .order_by(BuyOrderObservation.observed_at.desc())
         )
     )
@@ -380,33 +413,28 @@ def _freshness(
 
 
 def build_dashboard(session: Session, mode: Mode, settings: Settings) -> Dashboard:
-    data = _load(session, mode)
+    selected = _load_listings(session, mode, listing_limit=MAX_DASHBOARD_LISTINGS)
+    names = {listing.item.market_hash_name for listing in selected}
+    data = (
+        _load(session, mode, market_hash_names=names) if names else MarketData([], [], [], [], [])
+    )
     evidence_by_name = _build_evidence(data)
     floats: dict[str, list[Decimal]] = defaultdict(list)
     for listing in data.listings:
         if listing.item.float_value is not None:
             floats[listing.item.market_hash_name].append(listing.item.float_value)
-    rows = [_row(listing, evidence_by_name, floats, mode) for listing in data.listings]
+    rows = [_row(listing, evidence_by_name, floats, mode) for listing in selected]
     statuses = market_statuses(session, mode, settings)
     last_sync = max(
         (status.last_sync_at for status in statuses if status.last_sync_at is not None),
         default=None,
     )
-    warnings: list[str] = []
-    if mode == "demo":
-        warnings.append("DEMO — toutes les données sont des fixtures synthétiques isolées du réel.")
-    if any(row.price_eur_reference is None for row in rows):
-        warnings.append("Certains prix n'ont pas de taux EUR sourcé et ne sont pas comparables.")
-    if any(status.status in {"error", "unavailable", "stale", "very_stale"} for status in statuses):
-        warnings.append("Une ou plusieurs plateformes sont indisponibles ou périmées.")
-    if any(status.status == "not_configured" for status in statuses):
-        warnings.append("Certaines plateformes optionnelles ne sont pas configurées.")
     return Dashboard(
         mode=mode,
         listings=rows,
         markets=statuses,
         last_sync_at=last_sync,
-        warnings=warnings,
+        warnings=_analysis_warnings(rows, statuses, mode),
     )
 
 
@@ -416,10 +444,29 @@ def build_item_detail(
     mode: Mode,
     settings: Settings,
 ) -> ItemDetail | None:
-    dashboard = build_dashboard(session, mode, settings)
-    row = next((item for item in dashboard.listings if item.id == listing_id), None)
-    if row is None:
+    listing = session.scalar(
+        select(MarketListing)
+        .where(
+            MarketListing.mode == mode,
+            MarketListing.status == "ACTIVE",
+            MarketListing.id == listing_id,
+        )
+        .options(selectinload(MarketListing.item).selectinload(CS2Item.stickers))
+    )
+    if listing is None:
         return None
+    data = _load(session, mode, market_hash_names={listing.item.market_hash_name})
+    evidence_by_name = _build_evidence(data)
+    peer_floats: list[Decimal] = []
+    for peer in data.listings:
+        if peer.item.float_value is not None:
+            peer_floats.append(peer.item.float_value)
+    row = _row(
+        listing,
+        evidence_by_name,
+        {listing.item.market_hash_name: peer_floats},
+        mode,
+    )
     observations = list(
         session.scalars(
             select(PriceObservation)
@@ -430,7 +477,6 @@ def build_item_detail(
             .order_by(PriceObservation.timestamp.desc())
         )
     )
-    data = _load(session, mode)
     grouped: dict[tuple[str, str], list[Decimal]] = defaultdict(list)
     for observation in observations:
         if observation.price_eur_reference is not None:
@@ -478,8 +524,29 @@ def build_item_detail(
             settings,
         ),
         history=[Observation.model_validate(item) for item in observations],
-        warnings=dashboard.warnings,
+        warnings=_analysis_warnings(
+            [row],
+            market_statuses(session, mode, settings),
+            mode,
+        ),
     )
+
+
+def _analysis_warnings(
+    rows: list[ScannerRow],
+    statuses: list[MarketStatus],
+    mode: Mode,
+) -> list[str]:
+    warnings: list[str] = []
+    if mode == "demo":
+        warnings.append("DEMO — toutes les données sont des fixtures synthétiques isolées du réel.")
+    if any(row.price_eur_reference is None for row in rows):
+        warnings.append("Certains prix n'ont pas de taux EUR sourcé et ne sont pas comparables.")
+    if any(status.status in {"error", "unavailable", "stale", "very_stale"} for status in statuses):
+        warnings.append("Une ou plusieurs plateformes sont indisponibles ou périmées.")
+    if any(status.status == "not_configured" for status in statuses):
+        warnings.append("Certaines plateformes optionnelles ne sont pas configurées.")
+    return warnings
 
 
 def refresh_opportunities(session: Session, mode: Mode, settings: Settings) -> int:
@@ -491,6 +558,12 @@ def refresh_opportunities(session: Session, mode: Mode, settings: Settings) -> i
             floats[listing.item.market_hash_name].append(listing.item.float_value)
 
     now = datetime.now(UTC)
+    snapshots = {
+        snapshot.listing_id: snapshot
+        for snapshot in session.scalars(
+            select(ListingAnalysisSnapshot).where(ListingAnalysisSnapshot.mode == mode)
+        )
+    }
     active_listing_ids: set[str] = set()
     count = 0
     for listing in data.listings:
@@ -500,6 +573,11 @@ def refresh_opportunities(session: Session, mode: Mode, settings: Settings) -> i
             floats.get(listing.item.market_hash_name, []),
             mode,
         )
+        snapshot = snapshots.get(listing.id)
+        if snapshot is None:
+            snapshot = ListingAnalysisSnapshot(mode=mode, listing_id=listing.id)
+            session.add(snapshot)
+        _update_snapshot(snapshot, analysis, now)
         if analysis.opportunity_score is None:
             continue
         opportunity = session.scalar(
@@ -543,6 +621,98 @@ def refresh_opportunities(session: Session, mode: Mode, settings: Settings) -> i
             opportunity.updated_at = now
     session.flush()
     return count
+
+
+def _update_snapshot(
+    snapshot: ListingAnalysisSnapshot,
+    analysis: Analysis,
+    calculated_at: datetime,
+) -> None:
+    snapshot.estimated_value_eur = analysis.estimated_value
+    snapshot.potential_profit_eur = analysis.potential_profit
+    snapshot.roi = analysis.roi
+    snapshot.opportunity_score = analysis.opportunity_score
+    snapshot.float_score = analysis.float_score
+    snapshot.liquidity_score = analysis.liquidity
+    snapshot.liquidity_category = analysis.liquidity_category
+    snapshot.liquidity_evidence_completeness = analysis.liquidity_evidence_completeness
+    snapshot.confidence = analysis.confidence
+    snapshot.reference_method = analysis.reference_method
+    snapshot.reference_sources = list(analysis.reference_sources)
+    snapshot.reference_calculated_at = analysis.reference_calculated_at
+    snapshot.spread_eur = analysis.spread_eur
+    snapshot.spread_percent = analysis.spread_percent
+    snapshot.risk_score = analysis.risk_score
+    snapshot.risk_factors = list(analysis.risk_factors)
+    snapshot.warnings = analysis.warnings
+    snapshot.calculated_at = calculated_at
+
+
+def row_from_snapshot(
+    listing: MarketListing,
+    snapshot: ListingAnalysisSnapshot,
+) -> ScannerRow:
+    return ScannerRow(
+        id=listing.id,
+        market_hash_name=listing.item.market_hash_name,
+        weapon=listing.item.weapon,
+        skin=listing.item.skin,
+        exterior=listing.item.exterior,
+        platform=cast(Platform, listing.platform),
+        price_original=listing.price_original,
+        currency_original=listing.currency_original,
+        price_eur_reference=listing.price_eur_reference,
+        float_value=listing.item.float_value,
+        paint_seed=listing.item.paint_seed,
+        paint_index=listing.item.paint_index,
+        doppler_phase=listing.item.doppler_phase,
+        fade_percentage=listing.item.fade_percentage,
+        inspect_link=listing.item.inspect_link,
+        listing_url=listing.listing_url,
+        observed_at=listing.observed_at,
+        estimated_value_eur=snapshot.estimated_value_eur,
+        potential_profit_eur=snapshot.potential_profit_eur,
+        roi=snapshot.roi,
+        opportunity_score=snapshot.opportunity_score,
+        float_score=snapshot.float_score,
+        liquidity=snapshot.liquidity_score,
+        liquidity_category=cast(LiquidityCategory | None, snapshot.liquidity_category),
+        liquidity_evidence_completeness=snapshot.liquidity_evidence_completeness,
+        confidence=snapshot.confidence,
+        reference_method=snapshot.reference_method,
+        reference_sources=snapshot.reference_sources,
+        reference_calculated_at=snapshot.reference_calculated_at,
+        spread_eur=snapshot.spread_eur,
+        spread_percent=snapshot.spread_percent,
+        risk_score=snapshot.risk_score,
+        risk_factors=snapshot.risk_factors,
+        stickers=[Sticker.model_validate(sticker) for sticker in listing.item.stickers],
+        warnings=[*listing.warnings, *snapshot.warnings],
+    )
+
+
+def row_without_snapshot(listing: MarketListing) -> ScannerRow:
+    return ScannerRow(
+        id=listing.id,
+        market_hash_name=listing.item.market_hash_name,
+        weapon=listing.item.weapon,
+        skin=listing.item.skin,
+        exterior=listing.item.exterior,
+        platform=cast(Platform, listing.platform),
+        price_original=listing.price_original,
+        currency_original=listing.currency_original,
+        price_eur_reference=listing.price_eur_reference,
+        float_value=listing.item.float_value,
+        paint_seed=listing.item.paint_seed,
+        paint_index=listing.item.paint_index,
+        doppler_phase=listing.item.doppler_phase,
+        fade_percentage=listing.item.fade_percentage,
+        inspect_link=listing.item.inspect_link,
+        listing_url=listing.listing_url,
+        observed_at=listing.observed_at,
+        stickers=[Sticker.model_validate(sticker) for sticker in listing.item.stickers],
+        warnings=[*listing.warnings, "Analyse en attente de la prochaine synchronisation."],
+    )
 
 
 def _build_evidence(data: MarketData) -> dict[str, list[MarketEvidence]]:

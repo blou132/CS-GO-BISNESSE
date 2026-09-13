@@ -32,6 +32,19 @@ Freshness = Literal["fresh", "stale", "very_stale", "unknown"]
 LiquidityCategory = Literal["VERY_LOW", "LOW", "MEDIUM", "HIGH", "VERY_HIGH"]
 Money = Annotated[Decimal, Field(ge=0, allow_inf_nan=False, max_digits=20, decimal_places=8)]
 FeeType = Literal["BUY", "SELL", "DEPOSIT", "WITHDRAW", "TRADE", "PAYMENT", "FX"]
+ScannerSort = Literal[
+    "opportunity",
+    "roi",
+    "profit",
+    "price",
+    "float",
+    "liquidity",
+    "risk",
+    "confidence",
+    "spread",
+    "discount",
+    "recent",
+]
 
 
 class Sticker(BaseModel):
@@ -123,6 +136,24 @@ class Dashboard(BaseModel):
     markets: list[MarketStatus]
     last_sync_at: datetime | None
     warnings: list[str]
+
+
+class ScannerFacets(BaseModel):
+    markets: list[Platform]
+    weapons: list[str]
+    exteriors: list[str]
+    currencies: list[str]
+
+
+class ScannerPage(BaseModel):
+    mode: Mode
+    items: list[ScannerRow]
+    total: int
+    page: int
+    page_size: int
+    pages: int
+    facets: ScannerFacets
+    warnings: list[str] = Field(default_factory=list)
 
 
 class MarketMetrics(BaseModel):

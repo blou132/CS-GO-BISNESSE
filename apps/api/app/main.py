@@ -1,7 +1,8 @@
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from typing import Annotated, cast
+from decimal import Decimal
+from typing import Annotated, Literal, cast
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -35,6 +36,8 @@ from app.schemas.api import (
     NetProfitResponse,
     ProfitRequest,
     ProfitResponse,
+    ScannerPage,
+    ScannerSort,
     SystemHealth,
 )
 from app.services.analysis import build_dashboard, build_item_detail, market_statuses
@@ -42,6 +45,7 @@ from app.services.demo import ensure_demo
 from app.services.fees import calculate_stored_fee
 from app.services.health import system_health
 from app.services.monitoring import build_market_monitor
+from app.services.scanner import ScannerQuery, build_scanner_page
 from app.services.scheduler import MarketSyncScheduler
 from app.services.sync import (
     SyncAlreadyRunning,
@@ -148,6 +152,64 @@ def dashboard(
     mode: Annotated[Mode, Query()] = "live",
 ) -> Dashboard:
     return _dashboard(session, mode, settings)
+
+
+@app.get("/api/scanner", response_model=ScannerPage, tags=["analysis"])
+def scanner(
+    session: DbSession,
+    settings: SettingsDep,
+    mode: Annotated[Mode, Query()] = "live",
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=10, le=100)] = 50,
+    sort: Annotated[ScannerSort, Query()] = "opportunity",
+    market: Annotated[Literal["csfloat", "skinport", "dmarket"] | None, Query()] = None,
+    weapon: Annotated[str | None, Query(min_length=1, max_length=128)] = None,
+    skin: Annotated[str | None, Query(min_length=1, max_length=256)] = None,
+    exterior: Annotated[str | None, Query(min_length=1, max_length=64)] = None,
+    currency: Annotated[str | None, Query(pattern="^[A-Z]{3}$")] = None,
+    pattern_type: Annotated[Literal["doppler", "fade", "sticker"] | None, Query()] = None,
+    min_price: Annotated[Decimal | None, Query(ge=0)] = None,
+    max_price: Annotated[Decimal | None, Query(ge=0)] = None,
+    min_profit: Annotated[Decimal | None, Query()] = None,
+    min_roi: Annotated[Decimal | None, Query()] = None,
+    max_float: Annotated[Decimal | None, Query(ge=0, le=1)] = None,
+    paint_seed: Annotated[int | None, Query(ge=0, le=1000)] = None,
+    min_score: Annotated[int | None, Query(ge=0, le=100)] = None,
+    min_liquidity: Annotated[int | None, Query(ge=0, le=100)] = None,
+    min_confidence: Annotated[int | None, Query(ge=0, le=100)] = None,
+    max_risk: Annotated[int | None, Query(ge=0, le=100)] = None,
+    max_spread: Annotated[Decimal | None, Query(ge=0)] = None,
+) -> ScannerPage:
+    if mode == "demo":
+        ensure_demo(session, settings)
+    if min_price is not None and max_price is not None and min_price > max_price:
+        raise HTTPException(status_code=422, detail="Le prix minimum dépasse le prix maximum.")
+    return build_scanner_page(
+        session,
+        ScannerQuery(
+            mode=mode,
+            page=page,
+            page_size=page_size,
+            sort=sort,
+            market=market,
+            weapon=weapon,
+            skin=skin,
+            exterior=exterior,
+            currency=currency,
+            pattern_type=pattern_type,
+            min_price=min_price,
+            max_price=max_price,
+            min_profit=min_profit,
+            min_roi=min_roi,
+            max_float=max_float,
+            paint_seed=paint_seed,
+            min_score=min_score,
+            min_liquidity=min_liquidity,
+            min_confidence=min_confidence,
+            max_risk=max_risk,
+            max_spread=max_spread,
+        ),
+    )
 
 
 @app.post("/api/sync", response_model=Dashboard, tags=["analysis"])

@@ -89,6 +89,18 @@ ROI, raison, date de détection et dernière vue. Les opportunités sont
 recalculées après une synchronisation réussie. En live, elles restent absentes
 tant que les ventes/frais nécessaires au calcul ne sont pas disponibles.
 
+### `listing_analysis_snapshots`
+
+Snapshot technique d'une analyse par annonce et par mode. Il conserve les
+valeurs calculées nécessaires au scanner : référence, profit, ROI, scores
+d'opportunité/float/liquidité/confiance/risque, spread, méthode, sources et
+facteurs explicatifs. Il est recalculé après une synchronisation réussie.
+
+Cette table ne constitue pas une transaction ni une nouvelle source de prix.
+Elle évite de recalculer et transférer toute la base lors de chaque tri du
+scanner. Les lignes sans snapshot restent affichables avec des métriques
+inconnues et un avertissement explicite.
+
 ### `pattern_rules`
 
 Structure préparatoire : skin, seed, catégorie, tier, premium estimé,
@@ -146,6 +158,11 @@ confiance marché 10 %, sécurité inverse du risque 5 %. Les pondérations vive
 immuable remplaçable et le calcul possède un test dédié. En live, profit, ROI
 et score restent inconnus tant que les frais effectifs et la route de revente
 ne le sont pas.
+
+Le scanner interroge ces snapshots par pages de 10 à 100 lignes. Les index
+portent sur les clés d'analyse, `mode/status/date/prix`, le float et le paint
+seed. Le dashboard est plafonné aux 100 annonces récentes ; il ne renvoie pas
+la table complète au navigateur.
 
 ## Concepts futurs non persistés
 

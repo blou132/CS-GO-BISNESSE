@@ -58,6 +58,8 @@ class CS2Item(Base):
             "fade_percentage IS NULL OR (fade_percentage >= 0 AND fade_percentage <= 100)"
         ),
         CheckConstraint("mode IN ('demo', 'live')"),
+        Index("ix_cs2_item_float_value", "float_value"),
+        Index("ix_cs2_item_paint_seed", "paint_seed"),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     canonical_item_id: Mapped[str | None] = mapped_column(
@@ -116,6 +118,8 @@ class MarketListing(Base):
         CheckConstraint("price_original >= 0"),
         CheckConstraint("mode IN ('demo', 'live')"),
         CheckConstraint("status IN ('ACTIVE','INACTIVE','SOLD','UNKNOWN')"),
+        Index("ix_market_listing_scan", "mode", "status", "observed_at"),
+        Index("ix_market_listing_price", "mode", "status", "price_eur_reference"),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     mode: Mapped[str] = mapped_column(String(8), index=True)
@@ -315,6 +319,60 @@ class MarketOpportunity(Base):
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+    listing: Mapped[MarketListing] = relationship()
+
+
+class ListingAnalysisSnapshot(Base):
+    __tablename__ = "listing_analysis_snapshots"
+    __table_args__ = (
+        UniqueConstraint("mode", "listing_id", name="uq_listing_analysis_snapshot"),
+        CheckConstraint("mode IN ('demo', 'live')"),
+        CheckConstraint(
+            "opportunity_score IS NULL OR (opportunity_score >= 0 AND opportunity_score <= 100)"
+        ),
+        CheckConstraint("float_score IS NULL OR (float_score >= 0 AND float_score <= 100)"),
+        CheckConstraint(
+            "liquidity_score IS NULL OR (liquidity_score >= 0 AND liquidity_score <= 100)"
+        ),
+        CheckConstraint(
+            "liquidity_evidence_completeness IS NULL OR "
+            "(liquidity_evidence_completeness >= 0 AND liquidity_evidence_completeness <= 100)"
+        ),
+        CheckConstraint(
+            "liquidity_category IS NULL OR liquidity_category IN "
+            "('VERY_LOW','LOW','MEDIUM','HIGH','VERY_HIGH')"
+        ),
+        CheckConstraint("confidence IS NULL OR (confidence >= 0 AND confidence <= 100)"),
+        CheckConstraint("risk_score IS NULL OR (risk_score >= 0 AND risk_score <= 100)"),
+        Index("ix_listing_analysis_opportunity", "mode", "opportunity_score"),
+        Index("ix_listing_analysis_liquidity", "mode", "liquidity_score"),
+        Index("ix_listing_analysis_risk", "mode", "risk_score"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    mode: Mapped[str] = mapped_column(String(8))
+    listing_id: Mapped[str] = mapped_column(
+        ForeignKey("market_listings.id", ondelete="CASCADE"), index=True
+    )
+    estimated_value_eur: Mapped[Decimal | None] = mapped_column(Numeric(20, 8))
+    potential_profit_eur: Mapped[Decimal | None] = mapped_column(Numeric(20, 8))
+    roi: Mapped[Decimal | None] = mapped_column(Numeric(20, 8))
+    opportunity_score: Mapped[int | None] = mapped_column(Integer)
+    float_score: Mapped[int | None] = mapped_column(Integer)
+    liquidity_score: Mapped[int | None] = mapped_column(Integer)
+    liquidity_category: Mapped[str | None] = mapped_column(String(20))
+    liquidity_evidence_completeness: Mapped[int | None] = mapped_column(Integer)
+    confidence: Mapped[int | None] = mapped_column(Integer)
+    reference_method: Mapped[str | None] = mapped_column(String(64))
+    reference_sources: Mapped[list[str]] = mapped_column(JSON, default=list)
+    reference_calculated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    spread_eur: Mapped[Decimal | None] = mapped_column(Numeric(20, 8))
+    spread_percent: Mapped[Decimal | None] = mapped_column(Numeric(20, 8))
+    risk_score: Mapped[int | None] = mapped_column(Integer)
+    risk_factors: Mapped[list[str]] = mapped_column(JSON, default=list)
+    warnings: Mapped[list[str]] = mapped_column(JSON, default=list)
+    calculated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
     listing: Mapped[MarketListing] = relationship()

@@ -82,6 +82,25 @@ def test_health_demo_and_live_are_isolated(tmp_path, monkeypatch) -> None:
             )
             assert all(row["risk_score"] is not None for row in payload["listings"])
             assert any(Decimal(row["potential_profit_eur"]) > 0 for row in payload["listings"])
+            scanner = client.get("/api/scanner?mode=demo&page=2&page_size=10&sort=risk")
+            assert scanner.status_code == 200
+            scanner_payload = scanner.json()
+            assert scanner_payload["total"] == 16
+            assert scanner_payload["page"] == 2
+            assert scanner_payload["page_size"] == 10
+            assert scanner_payload["pages"] == 2
+            assert len(scanner_payload["items"]) == 6
+            assert scanner_payload["warnings"] == []
+            assert scanner_payload["facets"]["markets"] == ["csfloat", "dmarket"]
+            risks = [item["risk_score"] for item in scanner_payload["items"]]
+            assert risks == sorted(risks)
+            csfloat = client.get("/api/scanner?mode=demo&page_size=10&market=csfloat&weapon=AK-47")
+            assert csfloat.status_code == 200
+            assert csfloat.json()["total"] == 2
+            assert all(item["platform"] == "csfloat" for item in csfloat.json()["items"])
+            assert (
+                client.get("/api/scanner?mode=demo&min_price=100&max_price=10").status_code == 422
+            )
             assert client.get("/api/dashboard?mode=live").json()["listings"] == []
             item_id = payload["listings"][0]["id"]
             detail = client.get(f"/api/items/{item_id}?mode=demo")

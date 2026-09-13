@@ -92,6 +92,24 @@ export interface DashboardData {
   warnings: string[];
 }
 
+export interface ScannerFacets {
+  markets: Platform[];
+  weapons: string[];
+  exteriors: string[];
+  currencies: string[];
+}
+
+export interface ScannerPageData {
+  mode: Mode;
+  items: ScannerRow[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+  facets: ScannerFacets;
+  warnings: string[];
+}
+
 export interface MarketMetrics {
   total_listings: number;
   active_listings: number;

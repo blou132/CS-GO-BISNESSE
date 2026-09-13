@@ -6,6 +6,8 @@ export interface Filters {
   weapon: string;
   skin: string;
   exterior: string;
+  currency: string;
+  patternType: string;
   minPrice: string;
   maxPrice: string;
   minProfit: string;
@@ -20,7 +22,7 @@ export interface Filters {
 }
 
 export type Sort = "opportunity" | "roi" | "profit" | "price" | "float" | "liquidity" | "risk" | "confidence" | "spread" | "discount" | "recent";
-export const emptyFilters: Filters = { market: "", weapon: "", skin: "", exterior: "", minPrice: "", maxPrice: "", minProfit: "", minRoi: "", maxFloat: "", paintSeed: "", minScore: "", minLiquidity: "", minConfidence: "", maxRisk: "", maxSpread: "" };
+export const emptyFilters: Filters = { market: "", weapon: "", skin: "", exterior: "", currency: "", patternType: "", minPrice: "", maxPrice: "", minProfit: "", minRoi: "", maxFloat: "", paintSeed: "", minScore: "", minLiquidity: "", minConfidence: "", maxRisk: "", maxSpread: "" };
 
 function matchesBound(value: string | number | null, bound: string, minimum: boolean): boolean {
   if (bound.trim() === "") return true;
@@ -36,6 +38,8 @@ export function filterAndSort(rows: ScannerRow[], filters: Filters, sort: Sort):
     (!filters.weapon || row.weapon === filters.weapon) &&
     (!filters.skin || (row.skin ?? row.market_hash_name).toLocaleLowerCase("fr").includes(filters.skin.toLocaleLowerCase("fr"))) &&
     (!filters.exterior || row.exterior === filters.exterior) &&
+    (!filters.currency || row.currency_original === filters.currency) &&
+    (!filters.patternType || (filters.patternType === "doppler" ? row.doppler_phase !== null : filters.patternType === "fade" ? row.fade_percentage !== null : row.stickers.length > 0)) &&
     matchesBound(row.price_eur_reference, filters.minPrice, true) &&
     matchesBound(row.price_eur_reference, filters.maxPrice, false) &&
     matchesBound(row.potential_profit_eur, filters.minProfit, true) &&

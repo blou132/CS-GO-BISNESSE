@@ -82,6 +82,38 @@ export async function proxyFx() {
   }
 }
 
+export async function proxyScanner(request: Request) {
+  const input = new URL(request.url);
+  const target = new URL("/api/scanner", apiBaseUrl());
+  const allowed = new Set([
+    "mode", "page", "page_size", "sort", "market", "weapon", "skin", "exterior",
+    "currency", "pattern_type", "min_price", "max_price", "min_profit", "min_roi",
+    "max_float", "paint_seed", "min_score", "min_liquidity", "min_confidence",
+    "max_risk", "max_spread",
+  ]);
+  for (const [key, value] of input.searchParams) {
+    if (allowed.has(key)) target.searchParams.set(key, value);
+  }
+  try {
+    const upstream = await fetch(target, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+      headers: { Accept: "application/json" },
+    });
+    const body: unknown = await upstream.json();
+    if (!upstream.ok) {
+      if (upstream.status >= 500) {
+        return Response.json({ detail: "API scanner indisponible." }, { status: 502 });
+      }
+      const detail = body && typeof body === "object" && "detail" in body && typeof body.detail === "string" ? body.detail : "Le scanner a refusé la requête.";
+      return Response.json({ detail }, { status: upstream.status });
+    }
+    return Response.json(body, { headers: { "Cache-Control": "no-store" } });
+  } catch {
+    return Response.json({ detail: "API scanner indisponible." }, { status: 503 });
+  }
+}
+
 export async function proxyApi(request: Request, path: "/api/dashboard" | "/api/sync" | `/api/items/${string}`) {
   const input = new URL(request.url);
   const mode = input.searchParams.get("mode") ?? "live";
