@@ -1,5 +1,11 @@
 # Registre des sources
 
+Mise a jour du 13 septembre : [SkinSniper](skinsniper.md) et
+[decouverte de marketplaces](MARKET_DISCOVERY.md). Le registre distingue
+desormais les capacites documentees et `collected_capabilities` effectivement
+raccordees ; ces dernieres ne prouvent pas une validation live authentifiee.
+L'authentification inconnue vaut `null`, pas "non requise".
+
 Vérification : 8 septembre 2026. Les capacités ci-dessous proviennent des
 documentations ou pages officielles liées dans chaque fiche. L'absence de
 documentation publique ne prouve pas qu'aucune API partenaire n'existe : elle

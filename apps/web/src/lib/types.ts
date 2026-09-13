@@ -135,9 +135,12 @@ export interface MarketMonitorData {
 export interface MarketSourceInfo {
   id: string;
   name: string;
-  source_type: "MARKETPLACE" | "TRADE" | "REFERENCE";
+  source_type: "MARKETPLACE" | "TRADE" | "REFERENCE" | "AGGREGATOR";
   access_status: "OFFICIAL_API" | "PUBLIC_API" | "REQUIRES_APPROVAL" | "RESEARCH_REQUIRED" | "UNAVAILABLE";
-  auth_required: boolean;
+  auth_required: boolean | null;
+  roles: string[];
+  api_discovery_status: "API_FOUND" | "PARTNER_API" | "API_NOT_FOUND";
+  collected_capabilities: string[];
   configured: boolean;
   runtime_status: string;
   capabilities: string[];

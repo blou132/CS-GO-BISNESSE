@@ -1,6 +1,6 @@
 # Recherche des sources de trade
 
-Vérification : 8 septembre 2026. Seules les surfaces officielles ont servi à
+Vérification : 13 septembre 2026. Seules les surfaces officielles ont servi à
 prendre une décision d'intégration.
 
 | Source | API officielle trouvée ? | Documentation | Auth / restrictions | Quote read-only | Décision |
@@ -14,6 +14,17 @@ prendre une décision d'intégration.
 « Non publiée » signifie qu'aucun contrat développeur public n'a été trouvé;
 cela ne constitue pas une preuve d'inexistence d'une API privée ou partenaire.
 Le projet n'utilise aucun scraping, cookie Steam, endpoint privé ou transaction.
+
+Nouvelle verification : [Tradeit](https://support.tradeit.gg/en/),
+[Swap.gg](https://help.swap.gg/en/), [SkinsMonkey](https://skinsmonkey.com/help)
+et leurs recherches officielles n'ont pas fourni de contrat developpeur tiers.
+Les [conditions CS.MONEY](https://cs.money/tos/) continuent a exiger un accord
+ecrit pour une application tierce ; son solde Trade n'est pas retirable.
+Le [Swagger DMarket](https://docs.dmarket.com/v1/swagger.html) reste la source
+des lectures analytiques signees, pas d'une quote d'echange cash executable.
+Pour les quatre premieres plateformes, auth partenaire, devises de quote,
+frais effectifs et limites API restent inconnus. Les tarifs d'une page
+commerciale ou d'un comparateur ne deviennent pas des frais transactionnels.
 
 ## Fondation TradeQuote
 

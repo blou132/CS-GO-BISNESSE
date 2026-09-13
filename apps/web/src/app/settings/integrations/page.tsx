@@ -55,8 +55,9 @@ export default function IntegrationsPage() {
       {catalog?.sources.map((source) => <article className="source-card" key={source.id}>
         <header><div><span className="source-type">{source.source_type}</span><h2>{source.name}</h2></div><span className={`source-access ${source.access_status.toLowerCase()}`}>{accessLabels[source.access_status]}</span></header>
         <p>{source.note}</p>
-        <dl><div><dt>État</dt><dd>{runtimeLabel(source)}</dd></div><div><dt>Authentification</dt><dd>{source.auth_required ? "Requise" : "Non requise"}</dd></div><div><dt>Configuration</dt><dd>{source.configured ? "Prête" : "Absente / non applicable"}</dd></div><div><dt>Vérification</dt><dd>{source.verified_at}</dd></div></dl>
-        <div className="capability-list">{source.capabilities.length ? source.capabilities.map((capability) => <span key={capability}>{capability.replaceAll("_", " ")}</span>) : <span>Aucune capacité autorisée</span>}</div>
+        <dl><div><dt>État</dt><dd>{runtimeLabel(source)}</dd></div><div><dt>Authentification</dt><dd>{source.auth_required === null ? "Non documentée" : source.auth_required ? "Requise" : "Non requise"}</dd></div><div><dt>Configuration</dt><dd>{source.configured ? "Prête" : "Absente / non applicable"}</dd></div><div><dt>Vérification</dt><dd>{source.verified_at}</dd></div></dl>
+        <div className="capability-list" aria-label="Capacités documentées">{source.capabilities.length ? source.capabilities.map((capability) => <span key={capability}>{capability.replaceAll("_", " ")}</span>) : <span>Aucune capacité API vérifiée</span>}</div>
+        <p><strong>Collecte raccordée :</strong> {source.collected_capabilities.length ? source.collected_capabilities.join(", ").replaceAll("_", " ") : "Aucune"}</p>
         <div className="source-links"><a href={source.official_url} target="_blank" rel="noreferrer">Site officiel</a>{source.documentation_url ? <a href={source.documentation_url} target="_blank" rel="noreferrer">Documentation</a> : null}</div>
       </article>)}
     </section>}

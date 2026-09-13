@@ -34,3 +34,29 @@ def test_catalog_reports_configuration_without_exposing_secrets() -> None:
     assert catalog["ecb"]["configured"] is True
     assert catalog["ecb"]["runtime_status"] == "online"
     assert "private-value" not in repr(catalog)
+
+
+def test_discovery_does_not_enable_unintegrated_sources_or_skinport_feed() -> None:
+    catalog = {row["id"]: row for row in source_catalog(Settings(_env_file=None), [])}
+    sniper = catalog["skinsniper"]
+    assert sniper["source_type"] == "AGGREGATOR"
+    assert sniper["roles"] == ("AGGREGATOR", "REFERENCE_SOURCE", "MARKET_DISCOVERY_SOURCE")
+    assert sniper["api_discovery_status"] == "API_NOT_FOUND"
+    assert sniper["auth_required"] is None
+    for name in (
+        "skinsniper",
+        "white_market",
+        "waxpeer",
+        "haloskins",
+        "buff_market",
+        "buff_163",
+        "skinflow",
+    ):
+        assert catalog[name]["configured"] is False
+        assert catalog[name]["runtime_status"] == "not_integrated"
+        assert catalog[name]["collected_capabilities"] == ()
+    assert "WEBSOCKET" in catalog["skinport"]["capabilities"]
+    assert "WEBSOCKET" not in catalog["skinport"]["collected_capabilities"]
+    assert len({source.id for source in SOURCES}) == len(SOURCES)
+    for source in SOURCES:
+        assert set(catalog[source.id]["collected_capabilities"]) <= set(source.capabilities)
