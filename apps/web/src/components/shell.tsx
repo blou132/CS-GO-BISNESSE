@@ -9,6 +9,7 @@ import { dateTime } from "@/lib/format";
 const navigation: { href: string; title: string; icon: IconName; detail: string }[] = [
   { href: "/", title: "Dashboard", icon: "dashboard", detail: "Vue d’ensemble" },
   { href: "/scanner", title: "Scanner", icon: "scanner", detail: "Explorer les annonces" },
+  { href: "/watchlist", title: "Watchlist", icon: "target", detail: "Règles de suivi" },
   { href: "/markets", title: "Marchés", icon: "markets", detail: "Sources et connexions" },
   { href: "/settings/integrations", title: "Intégrations", icon: "settings", detail: "Registre des sources" },
 ];

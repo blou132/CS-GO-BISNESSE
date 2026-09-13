@@ -177,6 +177,7 @@ d'exploitation. Le mot de passe brut n'est jamais stocké par l'application.
 - [Modèle de données](docs/DATA_MODEL.md)
 - [Price Engine V2](docs/PRICE_ENGINE.md)
 - [Scanner paginé](docs/SCANNER_API.md)
+- [Watchlist persistante](docs/WATCHLIST.md)
 - [Currency, Fee and Profit Engine](docs/FINANCE_ENGINE.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Audit initial](docs/AUDIT.md)

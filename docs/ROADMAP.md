@@ -23,6 +23,7 @@ les preuves d'exécution de cette passe.
 | V0.13 | Currency + Fee Engine | Taux BCE historisés, frais sourcés et calcul détaillé du profit net |
 | V0.14 | Recherche trade et TradeQuote | Sources auditées, distinction crédits/cash et valorisation read-only |
 | V0.14.1 | Scanner paginé | Snapshots d'analyse, filtres/tris SQL et pages bornées pour 100k+ annonces |
+| V0.14.2 | Watchlist persistante | CRUD protégé, isolation LIVE/DEMO, correspondances SQL paginées et validation navigateur |
 
 La préparation d'exploitation 24/7 complète ce socle : surcharge Compose de
 production, sauvegarde et restauration PostgreSQL, déploiement avec migration
@@ -41,7 +42,7 @@ profit artificiel. Les calculs démontrés avec des fixtures restent DEMO.
 | --- | --- |
 | V0.15 | Float, pattern et stickers avancés avec sources vérifiables |
 | V0.16 | Portfolio |
-| V0.17 | Watchlist persistante et alertes |
+| V0.17 | Collecte pilotée par la watchlist et alertes |
 | V0.18 | Opportunity Engine multi-catégories |
 | V0.19 | Arbitrage Market → Market |
 | V0.20 | Première plateforme de trade autorisée |

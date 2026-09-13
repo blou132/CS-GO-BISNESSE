@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Annotated, Literal, cast
+from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -40,6 +41,7 @@ from app.schemas.api import (
     ScannerSort,
     SystemHealth,
 )
+from app.schemas.watchlist import WatchlistPage, WatchRuleInput, WatchRuleView
 from app.services.analysis import build_dashboard, build_item_detail, market_statuses
 from app.services.demo import ensure_demo
 from app.services.fees import calculate_stored_fee
@@ -54,6 +56,7 @@ from app.services.sync import (
     close_adapters,
     synchronize,
 )
+from app.services.watchlist import find_rule, list_rules, matching_query, save_rule
 
 configure_logging()
 
@@ -237,6 +240,72 @@ async def sync_markets(
         raise HTTPException(status_code=409, detail=str(error)) from error
     session.expire_all()
     return _dashboard(session, mode, settings)
+
+
+@app.get("/api/watchlist", response_model=WatchlistPage, tags=["watchlist"])
+def watchlist(
+    session: DbSession,
+    mode: Annotated[Mode, Query()] = "live",
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 25,
+) -> WatchlistPage:
+    return list_rules(session, mode, page, page_size)
+
+
+@app.post("/api/watchlist", response_model=WatchRuleView, status_code=201, tags=["watchlist"])
+def create_watch_rule(
+    payload: WatchRuleInput,
+    session: DbSession,
+    mode: Annotated[Mode, Query()] = "live",
+) -> WatchRuleView:
+    return save_rule(session, mode, payload)
+
+
+@app.put("/api/watchlist/{rule_id}", response_model=WatchRuleView, tags=["watchlist"])
+def update_watch_rule(
+    rule_id: UUID,
+    payload: WatchRuleInput,
+    session: DbSession,
+    mode: Annotated[Mode, Query()] = "live",
+) -> WatchRuleView:
+    rule = find_rule(session, mode, str(rule_id))
+    if rule is None:
+        raise HTTPException(status_code=404, detail="Règle introuvable dans ce mode.")
+    return save_rule(session, mode, payload, rule)
+
+
+@app.delete("/api/watchlist/{rule_id}", status_code=204, tags=["watchlist"])
+def delete_watch_rule(
+    rule_id: UUID,
+    session: DbSession,
+    mode: Annotated[Mode, Query()] = "live",
+) -> Response:
+    rule = find_rule(session, mode, str(rule_id))
+    if rule is None:
+        raise HTTPException(status_code=404, detail="Règle introuvable dans ce mode.")
+    session.delete(rule)
+    session.commit()
+    return Response(status_code=204)
+
+
+@app.get("/api/watchlist/{rule_id}/matches", response_model=ScannerPage, tags=["watchlist"])
+def watch_rule_matches(
+    rule_id: UUID,
+    session: DbSession,
+    settings: SettingsDep,
+    mode: Annotated[Mode, Query()] = "live",
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=10, le=100)] = 25,
+    sort: Annotated[ScannerSort, Query()] = "recent",
+) -> ScannerPage:
+    rule = find_rule(session, mode, str(rule_id))
+    if rule is None:
+        raise HTTPException(status_code=404, detail="Règle introuvable dans ce mode.")
+    if not rule.enabled:
+        raise HTTPException(status_code=409, detail="Cette règle est en pause.")
+    if mode == "demo":
+        ensure_demo(session, settings)
+    return build_scanner_page(session, matching_query(rule, mode, page, page_size, sort))
 
 
 @app.get("/api/market-monitor", response_model=MarketMonitor, tags=["analysis"])

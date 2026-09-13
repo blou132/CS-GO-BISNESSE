@@ -34,6 +34,9 @@ class ScannerQuery:
     min_confidence: int | None = None
     max_risk: int | None = None
     max_spread: Decimal | None = None
+    market_hash_name: str | None = None
+    paint_seeds: tuple[int, ...] = ()
+    doppler_phase: str | None = None
 
 
 def build_scanner_page(session: Session, query: ScannerQuery) -> ScannerPage:
@@ -88,6 +91,14 @@ def _filtered_statement(
     )
     if query.market:
         statement = statement.where(MarketListing.platform == query.market)
+    if query.market_hash_name:
+        statement = statement.where(CS2Item.market_hash_name == query.market_hash_name)
+    if query.paint_seeds:
+        statement = statement.where(CS2Item.paint_seed.in_(query.paint_seeds))
+    if query.doppler_phase:
+        statement = statement.where(
+            func.lower(CS2Item.doppler_phase) == query.doppler_phase.lower()
+        )
     if query.weapon:
         statement = statement.where(CS2Item.weapon == query.weapon)
     if query.skin:
