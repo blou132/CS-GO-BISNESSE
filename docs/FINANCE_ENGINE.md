@@ -30,6 +30,13 @@ aucun pourcentage universel à Skinport, CSFloat ou une autre plateforme.
 DMarket peut alimenter ses frais de vente par l'endpoint officiel
 `customized-fees` lorsque les clés sont configurées.
 
+Les regles verifiees dans le futur ou depuis plus de sept jours sont exclues.
+Il s'agit d'une politique conservative interne (`max_age` parametrable lors
+de l'appel), pas d'une duree de validite annoncee par une marketplace. Les
+montants fixes, minimums et seuils exigent une devise explicite. Deux regles
+de meme priorite mais de montants differents donnent `null`, sans selection
+arbitraire liee a l'ordre des lignes.
+
 ## Profit net
 
 `PurchaseCostBreakdown` additionne :

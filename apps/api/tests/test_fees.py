@@ -136,3 +136,24 @@ def test_stored_fee_schedule_is_used_without_hardcoded_fallback(tmp_path) -> Non
     assert result.fee_amount == Decimal("2.00")
     assert result.source == "https://docs.dmarket.com/v1/swagger.html"
     engine.dispose()
+
+
+@pytest.mark.parametrize("verified_at", [NOW + timedelta(seconds=1), NOW - timedelta(days=8)])
+def test_future_or_old_fee_verification_is_not_usable(verified_at):
+    assert (
+        calculate_fee(
+            Decimal("100"), "USD", "dmarket", "SELL", [rule(verified_at=verified_at)], at=NOW
+        )
+        is None
+    )
+
+
+def test_ambiguous_fee_rules_never_depend_on_query_order():
+    rules = [rule(rate=Decimal("0.01")), rule(rate=Decimal("0.05"))]
+    for values in (rules, list(reversed(rules))):
+        assert calculate_fee(Decimal("100"), "USD", "dmarket", "SELL", values, at=NOW) is None
+
+
+def test_fixed_fee_without_currency_is_rejected():
+    with pytest.raises(ValueError, match="devise explicite"):
+        calculate_fee(Decimal("100"), "USD", "dmarket", "SELL", [rule(currency=None)], at=NOW)

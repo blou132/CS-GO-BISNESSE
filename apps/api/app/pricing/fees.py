@@ -1,11 +1,12 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Literal
 
 FeeType = Literal["BUY", "SELL", "DEPOSIT", "WITHDRAW", "TRADE", "PAYMENT", "FX"]
 ZERO = Decimal(0)
+MAX_FEE_AGE = timedelta(days=7)
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,7 @@ def calculate_fee(
     *,
     item_name: str | None = None,
     at: datetime | None = None,
+    max_age: timedelta = MAX_FEE_AGE,
 ) -> FeeCalculation | None:
     _non_negative(base_amount, "base_amount")
     code = currency.upper()
@@ -58,10 +60,14 @@ def calculate_fee(
     if not platform.strip():
         raise ValueError("La plateforme est requise.")
     current = _aware(at or datetime.now(UTC))
+    if max_age <= timedelta(0):
+        raise ValueError("La fraîcheur maximale des frais doit être positive.")
     candidates: list[FeeRule] = []
     for rule in rules:
         _validate_rule(rule)
         if rule.platform != platform or rule.fee_type != fee_type:
+            continue
+        if not timedelta(0) <= current - _aware(rule.verified_at) <= max_age:
             continue
         if rule.currency is not None and rule.currency != code:
             continue
@@ -87,6 +93,24 @@ def calculate_fee(
         reverse=True,
     )
     selected = candidates[0]
+    priority = (
+        selected.applies_to is not None,
+        _aware(selected.valid_from),
+        _aware(selected.verified_at),
+    )
+    for candidate in candidates[1:]:
+        if (
+            candidate.applies_to is not None,
+            _aware(candidate.valid_from),
+            _aware(candidate.verified_at),
+        ) != priority:
+            break
+        if (candidate.rate, candidate.fixed_amount, candidate.minimum_fee) != (
+            selected.rate,
+            selected.fixed_amount,
+            selected.minimum_fee,
+        ):
+            return None  # Conflicting equally applicable terms must not depend on row order.
     variable = base_amount * selected.rate if selected.rate is not None else ZERO
     fixed = selected.fixed_amount or ZERO
     amount = variable + fixed
@@ -132,6 +156,13 @@ def _validate_rule(rule: FeeRule) -> None:
         or rule.currency != rule.currency.upper()
     ):
         raise ValueError("La devise d'une règle doit être un code ISO majuscule.")
+    if rule.currency is None and (
+        rule.fixed_amount is not None
+        or rule.minimum_fee is not None
+        or rule.min_amount is not None
+        or rule.max_amount is not None
+    ):
+        raise ValueError("Une composante monétaire exige une devise explicite.")
     if rule.valid_until is not None and _aware(rule.valid_until) < _aware(rule.valid_from):
         raise ValueError("La fin de validité précède le début de validité.")
 
