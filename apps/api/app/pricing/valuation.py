@@ -162,7 +162,7 @@ def calculate_reference_price(
         (
             "CURRENT_BUY_ORDERS",
             _best_per_platform(
-                _recent(validated, "BUY_ORDER", current, config.current_market_max_age),
+                _current_buy_orders(validated, current, config.current_market_max_age),
                 highest=True,
             ),
         ),
@@ -201,7 +201,7 @@ def calculate_spread(
     current = _aware(now or datetime.now(UTC))
     validated = [_validate_evidence(item, current) for item in evidence]
     asks = _recent(validated, "LISTING", current, max_age)
-    bids = _recent(validated, "BUY_ORDER", current, max_age)
+    bids = _current_buy_orders(validated, current, max_age)
     if not asks or not bids:
         return None
     ask = min(asks, key=lambda item: item.value_eur)
@@ -386,6 +386,18 @@ def _recent(
     return [item for item in evidence if item.kind == kind and now - item.observed_at <= max_age]
 
 
+def _current_buy_orders(
+    evidence: Sequence[MarketEvidence], now: datetime, max_age: timedelta
+) -> list[MarketEvidence]:
+    orders = _recent(evidence, "BUY_ORDER", now, max_age)
+    latest: dict[str, datetime] = {}
+    for item in orders:
+        latest[item.platform] = max(latest.get(item.platform, item.observed_at), item.observed_at)
+    return [
+        item for item in orders if item.observed_at == latest[item.platform] and item.volume != 0
+    ]
+
+
 def _best_per_platform(
     evidence: Sequence[MarketEvidence], *, highest: bool
 ) -> list[MarketEvidence]:
@@ -410,8 +422,16 @@ def _best_historical_medians(
 ) -> list[MarketEvidence]:
     rank = {"7D": 0, "30D": 1, "24H": 2, "90D": 3}
     candidates = _recent(evidence, "HISTORICAL_MEDIAN", now, max_age)
-    selected: dict[str, MarketEvidence] = {}
+    latest: dict[tuple[str, str | None], MarketEvidence] = {}
     for item in candidates:
+        key = (item.platform, item.window)
+        previous = latest.get(key)
+        if previous is None or item.observed_at > previous.observed_at:
+            latest[key] = item
+    selected: dict[str, MarketEvidence] = {}
+    for item in latest.values():
+        if item.volume == 0:
+            continue
         current = selected.get(item.platform)
         item_rank = rank.get(item.window or "", len(rank))
         current_rank = rank.get(current.window or "", len(rank)) if current else len(rank) + 1
@@ -443,8 +463,9 @@ def _price_confidence(
     depth_bonus = min(config.max_depth_bonus, len(selected) * 2)
     volume = sum(item.volume or 0 for item in selected)
     volume_bonus = min(config.max_volume_bonus, volume // 10)
-    newest = max(item.observed_at for item in selected)
-    age_hours = Decimal(str((now - newest).total_seconds())) / Decimal(3600)
+    # One recent record must not rejuvenate an otherwise old sample.
+    typical_time = median(Decimal(str(item.observed_at.timestamp())) for item in selected)
+    age_hours = (Decimal(str(now.timestamp())) - typical_time) / Decimal(3600)
     freshness_bonus = max(0, config.max_freshness_bonus - int(age_hours // 6))
     disagreement = (
         (max(item.value_eur for item in selected) - min(item.value_eur for item in selected))

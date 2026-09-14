@@ -1,6 +1,6 @@
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from math import ceil
 from typing import cast
@@ -24,6 +24,7 @@ from app.pricing.comparison import float_score, summarize
 from app.pricing.finance import ProfitInput, calculate_profit
 from app.pricing.opportunity import OpportunityComponents, calculate_opportunity_score
 from app.pricing.valuation import (
+    DEFAULT_PRICE_CONFIG,
     LiquidityCategory,
     LiquidityInput,
     MarketEvidence,
@@ -58,6 +59,7 @@ INTEGRATION_STATUS: dict[Platform, IntegrationStatus] = {
 }
 DEMO_SALE_FEE_RATE = Decimal("0.10")
 MAX_DASHBOARD_LISTINGS = 100
+FloatGroup = tuple[str, str | None]
 
 
 @dataclass(frozen=True)
@@ -101,7 +103,11 @@ def _analyse(
     mode: Mode,
 ) -> Analysis:
     now = datetime.now(UTC)
-    score_float = float_score(listing.item.float_value, peer_floats)
+    score_float = (
+        float_score(listing.item.float_value, peer_floats)
+        if timedelta(0) <= now - _aware(listing.observed_at) <= timedelta(hours=24)
+        else None
+    )
     reference = calculate_reference_price(evidence, now=now)
     spread = calculate_spread(evidence, now=now)
     liquidity_result = calculate_liquidity(
@@ -262,13 +268,13 @@ def _load(
 def _row(
     listing: MarketListing,
     evidence_by_name: dict[str, list[MarketEvidence]],
-    floats_by_name: dict[str, list[Decimal]],
+    floats_by_name: dict[FloatGroup, list[Decimal]],
     mode: Mode,
 ) -> ScannerRow:
     analysis = _analyse(
         listing,
         evidence_by_name.get(listing.item.market_hash_name, []),
-        floats_by_name.get(listing.item.market_hash_name, []),
+        floats_by_name.get((listing.item.market_hash_name, listing.item.exterior), []),
         mode,
     )
     return ScannerRow(
@@ -345,7 +351,7 @@ def market_statuses(session: Session, mode: Mode, settings: Settings) -> list[Ma
             message = _not_configured_message(platform)
         else:
             message = state.message
-        if mode == "live" and status == "online":
+        if mode == "live" and status in {"online", "degraded"}:
             if freshness == "very_stale":
                 status = "very_stale"
             elif freshness == "stale":
@@ -419,10 +425,7 @@ def build_dashboard(session: Session, mode: Mode, settings: Settings) -> Dashboa
         _load(session, mode, market_hash_names=names) if names else MarketData([], [], [], [], [])
     )
     evidence_by_name = _build_evidence(data)
-    floats: dict[str, list[Decimal]] = defaultdict(list)
-    for listing in data.listings:
-        if listing.item.float_value is not None:
-            floats[listing.item.market_hash_name].append(listing.item.float_value)
+    floats = _peer_floats(data.listings)
     rows = [_row(listing, evidence_by_name, floats, mode) for listing in selected]
     statuses = market_statuses(session, mode, settings)
     last_sync = max(
@@ -457,14 +460,10 @@ def build_item_detail(
         return None
     data = _load(session, mode, market_hash_names={listing.item.market_hash_name})
     evidence_by_name = _build_evidence(data)
-    peer_floats: list[Decimal] = []
-    for peer in data.listings:
-        if peer.item.float_value is not None:
-            peer_floats.append(peer.item.float_value)
     row = _row(
         listing,
         evidence_by_name,
-        {listing.item.market_hash_name: peer_floats},
+        _peer_floats(data.listings),
         mode,
     )
     observations = list(
@@ -542,7 +541,10 @@ def _analysis_warnings(
         warnings.append("DEMO — toutes les données sont des fixtures synthétiques isolées du réel.")
     if any(row.price_eur_reference is None for row in rows):
         warnings.append("Certains prix n'ont pas de taux EUR sourcé et ne sont pas comparables.")
-    if any(status.status in {"error", "unavailable", "stale", "very_stale"} for status in statuses):
+    if any(
+        status.status in {"error", "unavailable", "degraded", "stale", "very_stale"}
+        for status in statuses
+    ):
         warnings.append("Une ou plusieurs plateformes sont indisponibles ou périmées.")
     if any(status.status == "not_configured" for status in statuses):
         warnings.append("Certaines plateformes optionnelles ne sont pas configurées.")
@@ -552,10 +554,7 @@ def _analysis_warnings(
 def refresh_opportunities(session: Session, mode: Mode, settings: Settings) -> int:
     data = _load(session, mode)
     evidence_by_name = _build_evidence(data)
-    floats: dict[str, list[Decimal]] = defaultdict(list)
-    for listing in data.listings:
-        if listing.item.float_value is not None:
-            floats[listing.item.market_hash_name].append(listing.item.float_value)
+    floats = _peer_floats(data.listings)
 
     now = datetime.now(UTC)
     snapshots = {
@@ -570,7 +569,7 @@ def refresh_opportunities(session: Session, mode: Mode, settings: Settings) -> i
         analysis = _analyse(
             listing,
             evidence_by_name.get(listing.item.market_hash_name, []),
-            floats.get(listing.item.market_hash_name, []),
+            floats.get((listing.item.market_hash_name, listing.item.exterior), []),
             mode,
         )
         snapshot = snapshots.get(listing.id)
@@ -715,42 +714,81 @@ def row_without_snapshot(listing: MarketListing) -> ScannerRow:
     )
 
 
+def _peer_floats(listings: list[MarketListing]) -> dict[FloatGroup, list[Decimal]]:
+    now = datetime.now(UTC)
+    result: dict[FloatGroup, list[Decimal]] = defaultdict(list)
+    seen: set[tuple[FloatGroup, str]] = set()
+    for listing in sorted(listings, key=lambda row: row.observed_at, reverse=True):
+        group = (listing.item.market_hash_name, listing.item.exterior)
+        identity = listing.item.asset_id or f"{listing.platform}:{listing.external_id}"
+        key = (group, identity)
+        if key in seen:
+            continue
+        seen.add(key)
+        value = listing.item.float_value
+        if (
+            listing.status == "ACTIVE"
+            and value is not None
+            and value.is_finite()
+            and 0 <= value <= 1
+            and timedelta(0) <= now - _aware(listing.observed_at) <= timedelta(hours=24)
+        ):
+            result[group].append(value)
+    return result
+
+
 def _build_evidence(data: MarketData) -> dict[str, list[MarketEvidence]]:
+    now = datetime.now(UTC)
     result: dict[str, list[MarketEvidence]] = defaultdict(list)
     for listing in data.listings:
-        if listing.price_eur_reference is not None:
+        if _usable_price(
+            listing.price_eur_reference,
+            listing.observed_at,
+            now,
+            DEFAULT_PRICE_CONFIG.current_market_max_age,
+        ):
             result[listing.item.market_hash_name].append(
                 MarketEvidence(
                     platform=listing.platform,
                     kind="LISTING",
-                    value_eur=listing.price_eur_reference,
+                    value_eur=cast(Decimal, listing.price_eur_reference),
                     observed_at=listing.observed_at,
                 )
             )
     for sale in data.realized_sales:
-        if sale.price_eur_reference is not None:
+        if _usable_price(
+            sale.price_eur_reference, sale.sold_at, now, DEFAULT_PRICE_CONFIG.realized_max_age
+        ):
             result[sale.market_hash_name].append(
                 MarketEvidence(
                     platform=sale.platform,
                     kind="REALIZED_SALE",
-                    value_eur=sale.price_eur_reference,
+                    value_eur=cast(Decimal, sale.price_eur_reference),
                     observed_at=sale.sold_at,
                     volume=1,
                 )
             )
-    for aggregate in data.aggregates:
-        if aggregate.median_eur_reference is not None:
+    for aggregate in _current_aggregates(data.aggregates):
+        if (
+            _usable_price(
+                aggregate.median_eur_reference,
+                aggregate.observed_at,
+                now,
+                DEFAULT_PRICE_CONFIG.aggregate_max_age,
+            )
+            and aggregate.volume != 0
+        ):
             result[aggregate.market_hash_name].append(
                 MarketEvidence(
                     platform=aggregate.platform,
                     kind="HISTORICAL_MEDIAN",
-                    value_eur=aggregate.median_eur_reference,
+                    value_eur=cast(Decimal, aggregate.median_eur_reference),
                     observed_at=aggregate.observed_at,
                     volume=aggregate.volume,
                     window=aggregate.window_code,
                 )
             )
-    for order in data.buy_orders:
+    for order in _current_orders(data.buy_orders, now):
         if order.price_eur_reference is not None:
             result[order.market_hash_name].append(
                 MarketEvidence(
@@ -763,12 +801,21 @@ def _build_evidence(data: MarketData) -> dict[str, list[MarketEvidence]]:
             )
     # Legacy/demo SALE observations predate the dedicated realized_sales table.
     for observation in data.observations:
-        if observation.observation_type == "SALE" and observation.price_eur_reference is not None:
+        if (
+            observation.observation_type == "SALE"
+            and _usable_price(
+                observation.price_eur_reference,
+                observation.timestamp,
+                now,
+                DEFAULT_PRICE_CONFIG.realized_max_age,
+            )
+            and observation.volume != 0
+        ):
             result[observation.market_hash_name].append(
                 MarketEvidence(
                     platform=observation.platform,
                     kind="REALIZED_SALE",
-                    value_eur=observation.price_eur_reference,
+                    value_eur=cast(Decimal, observation.price_eur_reference),
                     observed_at=observation.timestamp,
                     volume=observation.volume,
                 )
@@ -776,9 +823,57 @@ def _build_evidence(data: MarketData) -> dict[str, list[MarketEvidence]]:
     return result
 
 
+def _usable_price(
+    value: Decimal | None, observed_at: datetime, now: datetime, max_age: timedelta
+) -> bool:
+    return (
+        value is not None
+        and value.is_finite()
+        and value > 0
+        and timedelta(0) <= now - _aware(observed_at) <= max_age
+    )
+
+
+def _current_aggregates(rows: list[AggregateMarketStat]) -> list[AggregateMarketStat]:
+    latest: dict[tuple[str, str, str], AggregateMarketStat] = {}
+    for row in rows:
+        key = (row.platform, row.market_hash_name, row.window_code)
+        previous = latest.get(key)
+        if previous is None or row.observed_at > previous.observed_at:
+            latest[key] = row
+    return list(latest.values())
+
+
+def _current_orders(rows: list[BuyOrderObservation], now: datetime) -> list[BuyOrderObservation]:
+    latest: dict[tuple[str, str], datetime] = {}
+    for row in rows:
+        key = (row.platform, row.market_hash_name)
+        latest[key] = max(latest.get(key, row.observed_at), row.observed_at)
+    return [
+        row
+        for row in rows
+        if row.observed_at == latest[(row.platform, row.market_hash_name)]
+        and row.quantity > 0
+        and _usable_price(
+            row.price_eur_reference,
+            row.observed_at,
+            now,
+            DEFAULT_PRICE_CONFIG.current_market_max_age,
+        )
+        # Conditional bids are not interchangeable with an unrestricted bid for this skin.
+        and all(value is None or value == "" or value == "any" for value in row.attributes.values())
+    ]
+
+
 def _liquidity_input(
-    evidence: list[MarketEvidence], spread_percent: Decimal | None
+    evidence: list[MarketEvidence], spread_percent: Decimal | None, *, now: datetime | None = None
 ) -> LiquidityInput:
+    current_time = now or datetime.now(UTC)
+    evidence = [
+        item
+        for item in evidence
+        if timedelta(0) <= current_time - _aware(item.observed_at) <= timedelta(hours=24)
+    ]
     aggregates: dict[tuple[str, str], MarketEvidence] = {}
     for item in evidence:
         if item.kind != "HISTORICAL_MEDIAN" or item.window is None:
@@ -881,10 +976,8 @@ def _market_snapshots(
         ]
         orders = [
             item
-            for item in data.buy_orders
-            if item.platform == platform
-            and item.market_hash_name == market_hash_name
-            and item.price_eur_reference is not None
+            for item in _current_orders(data.buy_orders, now)
+            if item.platform == platform and item.market_hash_name == market_hash_name
         ]
         current_orders: list[BuyOrderObservation] = []
         if orders:

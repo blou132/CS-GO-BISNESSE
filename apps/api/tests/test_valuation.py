@@ -175,3 +175,33 @@ def test_invalid_or_future_evidence_is_rejected() -> None:
             ],
             now=NOW,
         )
+
+
+def test_replaced_or_empty_buy_order_snapshot_never_reuses_old_high_bid():
+    old = evidence("dmarket", "BUY_ORDER", "999", age=timedelta(hours=1), volume=10)
+    ask = evidence("csfloat", "LISTING", "100")
+    current = evidence("dmarket", "BUY_ORDER", "90", volume=2)
+    result = calculate_spread([old, current, ask], now=NOW)
+    assert result is not None and result.bid_eur == Decimal("90")
+    empty = evidence("dmarket", "BUY_ORDER", "90", volume=0)
+    assert calculate_spread([old, empty, ask], now=NOW) is None
+
+
+def test_zero_volume_history_does_not_resurrect_older_median():
+    old = evidence(
+        "skinport", "HISTORICAL_MEDIAN", "999", volume=30, window="7D", age=timedelta(hours=2)
+    )
+    empty = evidence("skinport", "HISTORICAL_MEDIAN", "100", volume=0, window="7D")
+    ask = evidence("csfloat", "LISTING", "95")
+    result = calculate_reference_price([old, empty, ask], now=NOW)
+    assert result is not None and result.method == "CURRENT_LISTINGS"
+
+
+def test_one_recent_sale_does_not_refresh_confidence_of_old_sample():
+    old = [evidence("dmarket", "REALIZED_SALE", "100", age=timedelta(days=20)) for _ in range(8)]
+    mixed = calculate_reference_price([*old, evidence("dmarket", "REALIZED_SALE", "100")], now=NOW)
+    fresh = calculate_reference_price(
+        [evidence("dmarket", "REALIZED_SALE", "100") for _ in range(9)], now=NOW
+    )
+    assert mixed is not None and fresh is not None
+    assert mixed.confidence < fresh.confidence
