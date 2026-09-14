@@ -80,8 +80,9 @@ observations dans notre base mais n'achète rien sur les marketplaces.
 ## Sécurité et exploitation locale
 
 Les ports publiés par Compose écoutent sur `127.0.0.1`. PostgreSQL reste
-sur le réseau interne Compose. L'application n'a pas encore de connexion
-utilisateur et ne doit pas être publiée sur Internet dans cet état.
+sur le réseau interne Compose. La branche de travail dispose d'une connexion
+administrateur privee (V0.10) ; elle reste volontairement non deployee sur
+la production actuelle. La presence du code ne vaut pas activation.
 Le proxy Next.js utilise une destination configurée côté serveur, avec
 une liste limitée de routes, des délais bornés et aucune destination
 fournie librement par le navigateur. CORS est limité à l'origine locale.
@@ -125,21 +126,22 @@ trouve dans [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Extensions futures
 
-Le Trade Engine utilisera un autre contrat d'adaptation : `TradeQuote`
-décrira les objets donnés/reçus, les crédits proposés par la plateforme,
-les valeurs cash estimées séparées, les frais et l'expiration. Les
+Le Trade Engine possede deja un contrat `TradeQuote` qui distingue les objets
+donnes/recus, les credits proposes par la plateforme, les valeurs cash
+estimees separees, les frais et l'expiration. Aucun fournisseur de quotes live
+n'est raccorde. Les
 plateformes Tradeit, CS.MONEY, Swap.gg et SkinsMonkey sont à étudier
 (`RESEARCH_REQUIRED`), sans supposer l'existence d'une API publique.
 
-Le Currency Engine conservera un `FxQuote` avec montant/devise originaux,
-taux, source, date et nature référence/effectif. EUR est la référence ;
-USD, GBP, JPY, CHF et CNY seront ajoutées avec un fournisseur documenté.
+Le Currency Engine conserve montant/devise originaux, taux, source, date et
+nature reference/effectif. EUR est la reference ; USD, GBP, JPY, CHF et CNY
+sont couverts par le collecteur BCE optionnel deja implemente.
 
 Le Route Optimizer pourra consommer les mêmes objets normalisés. Chaque
 arête (achat, vente, conversion, trade) portera coût, frais, taux effectif,
 risque, liquidité, délai et restrictions. Aucun graphe d'optimisation ni
 algorithme de recherche de routes n'est implémenté maintenant.
 
-Portfolio et watchlist ajouteront leurs propres services autour de
-`Purchase` et `WatchRule`, sans incorporer les formats propriétaires
-des marketplaces dans leur logique métier.
+La watchlist persistante possede deja CRUD, pause/reprise et correspondances
+sur donnees observees, avec isolation LIVE/DEMO. Le portfolio reste a etendre
+sans incorporer les formats proprietaires dans la logique metier.

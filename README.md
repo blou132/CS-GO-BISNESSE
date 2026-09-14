@@ -179,6 +179,7 @@ d'exploitation. Le mot de passe brut n'est jamais stocké par l'application.
 - [Scanner paginé](docs/SCANNER_API.md)
 - [Watchlist persistante](docs/WATCHLIST.md)
 - [Rapport data et validation du 13 septembre 2026](docs/DATA_MARKETS_REPORT_2026-09-13.md)
+- [Rapport sources, SkinSniper et valorisation du 14 septembre 2026](docs/SOURCES_VALUATION_REPORT_2026-09-14.md)
 - [Currency, Fee and Profit Engine](docs/FINANCE_ENGINE.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Audit initial](docs/AUDIT.md)
