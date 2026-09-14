@@ -2,7 +2,7 @@
 
 - Statut : `OFFICIAL_API`
 - Documentation officielle : <https://docs.dmarket.com/v1/swagger.html>
-- Vérification : 8 septembre 2026
+- Vérification documentaire : 13 septembre 2026
 - Base : `https://api.dmarket.com`
 
 ## API et authentification
@@ -39,3 +39,21 @@ L'algorithme de signature est vérifié cryptographiquement dans les tests, y
 compris pour un titre encodé dans le chemin. Offres, targets, ventes et frais
 sont testés sur réponses synthétiques. Aucune vraie paire de clés DMarket n'était disponible,
 donc aucune validation live authentifiée n'est revendiquée.
+
+## Collecte partielle et validation
+
+Un echec sur targets, ventes ou frais ne jette plus les offres deja obtenues.
+Chaque enrichissement conserve son code d'erreur ; l'etat persiste devient
+`degraded`, visible dans le monitoring, puis revient `online` apres une
+collecte complete. Un float egal a zero reste zero et non une donnee absente.
+
+La verification explicite se lance depuis `apps/api`, dependances installees,
+avec les deux variables de cle deja presentes dans l'environnement :
+
+```bash
+python -m app.markets.smoke --platform dmarket --query 'AK-47 | Redline (Field-Tested)' --live
+```
+
+Pas de lecture de `.env`, d'ecriture en base, de sortie de secrets ni de
+transaction. Code 0 pour `online`, 2 sinon. Sans paire de cles,
+`not_configured` est confirme ; l'appel authentifie reste `BLOCKED_EXTERNAL`.

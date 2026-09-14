@@ -15,6 +15,7 @@ export function monitorSummary(monitor: MarketMonitorData | null) {
 export function marketOperationalLabel(market: MarketStatus): string {
   if (market.status === "not_configured") return "Option désactivée";
   if (market.status === "demo") return "Fixtures DEMO";
+  if (market.status === "degraded") return "Collecte partielle";
   if (market.freshness === "fresh") return "Données fraîches";
   if (market.freshness === "stale") return "Données périmées";
   if (market.freshness === "very_stale") return "Données très périmées";

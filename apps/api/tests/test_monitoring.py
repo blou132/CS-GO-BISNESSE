@@ -41,6 +41,50 @@ class StubAdapter(MarketAdapter):
         return None
 
 
+@pytest.mark.asyncio
+async def test_partial_sync_persists_primary_data_and_exposes_degraded_health(tmp_path):
+    from decimal import Decimal
+
+    from app.models import PriceObservation
+    from app.services.health import system_health
+
+    class PartialAdapter(StubAdapter):
+        async def search_items(self, query: str) -> AdapterResult:
+            return AdapterResult(
+                observations=[
+                    AdapterObservation(
+                        market_hash_name="TEST Skin",
+                        price=Decimal("10"),
+                        currency="EUR",
+                        observation_type="AGGREGATE",
+                        timestamp=datetime.now(UTC),
+                    )
+                ],
+                warnings=["Enrichissement sales_history indisponible (rate_limited)."],
+                partial_errors={"sales_history": "rate_limited"},
+            )
+
+    settings, engine, factory = _factory(tmp_path)
+    summary = await SyncCoordinator().synchronize_platform(
+        factory, "skinport", PartialAdapter(), settings, "TEST Skin"
+    )
+    assert summary.status == "degraded"
+    with factory() as session:
+        assert session.scalar(select(PriceObservation)) is not None
+        market = system_health(session, settings).markets["skinport"]
+        assert market.status == "degraded"
+        assert market.last_success_at is not None
+        assert "sales_history" in market.last_error
+        monitor = build_market_monitor(session, settings, scheduler_running=False)
+        assert any("partielle" in warning for warning in monitor.warnings)
+    await SyncCoordinator().synchronize_platform(
+        factory, "skinport", StubAdapter(), settings, "TEST Skin"
+    )
+    with factory() as session:
+        assert system_health(session, settings).markets["skinport"].status == "online"
+    engine.dispose()
+
+
 def _factory(tmp_path: Path) -> tuple[Settings, Engine, sessionmaker[Session]]:
     settings = Settings(database_url=f"sqlite:///{tmp_path / 'monitoring.db'}", environment="test")
     engine = build_engine(settings.database_url)

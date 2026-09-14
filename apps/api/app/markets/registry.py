@@ -241,7 +241,10 @@ SOURCES: tuple[MarketSource, ...] = (
         capabilities=(),
         official_url="https://skinflow.gg/",
         documentation_url=None,
-        note="Parcours de trade publics, aucun contrat API tiers identifié ; crédits non assimilés au cash.",
+        note=(
+            "Parcours de trade publics, aucun contrat API tiers identifié ; "
+            "crédits non assimilés au cash."
+        ),
         verified_at="2026-09-13",
     ),
     MarketSource(

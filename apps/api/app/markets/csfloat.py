@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .base import (
     AdapterListing,
@@ -31,7 +31,7 @@ class CSFloatAdapter(MarketAdapter):
     def __init__(
         self, api_key: str | None = None, *, client: httpx.AsyncClient | None = None
     ) -> None:
-        self._headers = {"Authorization": api_key} if api_key else {}
+        self._headers = {"Authorization": api_key.strip()} if api_key and api_key.strip() else {}
         self._http = ReadOnlyHTTP(self.market, "https://csfloat.com/api/v1", client=client)
 
     async def aclose(self) -> None:
@@ -126,20 +126,30 @@ class CSFloatSearch(BaseModel):
 
     market_hash_name: str | None = Field(default=None, max_length=512)
     strategy: Literal["WATCHLIST", "OPPORTUNITY_SCAN", "DISCOVERY"] = "WATCHLIST"
-    min_price_cents: int | None = Field(default=None, ge=0)
-    max_price_cents: int | None = Field(default=None, ge=0)
+    min_price_cents: int | None = Field(default=None, ge=0, strict=True)
+    max_price_cents: int | None = Field(default=None, ge=0, strict=True)
     min_float: float | None = Field(default=None, ge=0, le=1)
     max_float: float | None = Field(default=None, ge=0, le=1)
     paint_seed: int | None = Field(default=None, ge=0, le=1000)
     paint_index: int | None = Field(default=None, ge=0)
     def_index: int | None = Field(default=None, ge=0)
     collection: str | None = Field(default=None, max_length=128)
-    category: str | None = Field(default=None, max_length=128)
+    category: Literal[0, 1, 2, 3] | None = None
     stickers: str | None = Field(default=None, pattern=r"^\d+(?:\|\d+)?(?:,\d+(?:\|\d+)?)*$")
     sort_by: (
         Literal["lowest_price", "most_recent", "lowest_float", "best_deal", "float_rank"] | None
     ) = None
     limit: int = Field(default=50, ge=1, le=50)
+
+    @model_validator(mode="after")
+    def validate_ranges(self) -> "CSFloatSearch":
+        for lower, upper in (
+            (self.min_price_cents, self.max_price_cents),
+            (self.min_float, self.max_float),
+        ):
+            if lower is not None and upper is not None and lower > upper:
+                raise ValueError("Minimum must not exceed maximum")
+        return self
 
     def parameters(self) -> dict[str, str | int | float]:
         strategy_sort = {

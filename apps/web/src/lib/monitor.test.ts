@@ -78,4 +78,8 @@ describe("market monitor helpers", () => {
       }),
     ).toBe(true);
   });
+
+  it("affiche une collecte partielle même si ses données principales sont fraîches", () => {
+    expect(marketOperationalLabel({ ...market, status: "degraded", freshness: "fresh" })).toBe("Collecte partielle");
+  });
 });

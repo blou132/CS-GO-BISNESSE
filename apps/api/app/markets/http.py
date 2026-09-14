@@ -50,6 +50,7 @@ class ReadOnlyHTTP:
         self._cache: dict[str, CachedResponse] = {}
         self._lock = asyncio.Lock()
         self._next_request_at = 0.0
+        self._cooldown_until = 0.0
 
     async def aclose(self) -> None:
         if self.owns_client:
@@ -84,11 +85,13 @@ class ReadOnlyHTTP:
         self, request: httpx.Request, signer: Callable[[httpx.Request], None] | None
     ) -> CachedResponse:
         for attempt in range(self.max_attempts):
-            remaining = self._next_request_at - time.monotonic()
-            if remaining > self.max_retry_delay:
+            cooldown = self._cooldown_until - time.monotonic()
+            if cooldown > self.max_retry_delay:
                 raise MarketAdapterError(
-                    "rate_limited", "Marketplace request cooldown active", remaining
+                    "rate_limited", "Marketplace request cooldown active", cooldown
                 )
+            # Normal quota pacing is not an upstream failure or a retry delay.
+            remaining = max(self._next_request_at, self._cooldown_until) - time.monotonic()
             if remaining > 0:
                 await asyncio.sleep(remaining)
             if signer:
@@ -116,14 +119,14 @@ class ReadOnlyHTTP:
             if status == 429:
                 delay = retry_after_seconds(response.headers.get("Retry-After"))
                 delay = delay if delay is not None else 0.0
-                self._next_request_at = max(self._next_request_at, time.monotonic() + delay)
+                self._cooldown_until = max(self._cooldown_until, time.monotonic() + delay)
                 raise MarketAdapterError(
                     "rate_limited", "Marketplace temporarily unavailable", delay
                 )
             if status >= 500:
                 retry_after = retry_after_seconds(response.headers.get("Retry-After"))
                 delay = retry_after if retry_after is not None else 0.5 * 2**attempt
-                self._next_request_at = max(self._next_request_at, time.monotonic() + delay)
+                self._cooldown_until = max(self._cooldown_until, time.monotonic() + delay)
                 if delay > self.max_retry_delay or attempt + 1 == self.max_attempts:
                     raise MarketAdapterError(
                         "unavailable", "Marketplace temporarily unavailable", delay

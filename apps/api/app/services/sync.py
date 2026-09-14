@@ -185,20 +185,30 @@ async def _synchronize_platform(
 
     completed_at = datetime.now(UTC)
     duration_ms = _duration_ms(started)
+    status = "degraded" if result.partial_errors else "online"
+    message = "; ".join(result.warnings) or "Synchronisation réussie."
     with factory() as session:
         state = _state(session, platform)
         state.last_attempt_at = started_at
         stats = persist_result(session, result, platform, "live", settings)
         refresh_opportunities(session, "live", settings)
-        state.status = "online"
-        state.message = "; ".join(result.warnings) or "Synchronisation réussie."
+        state.status = status
+        state.message = message
         state.last_sync_at = completed_at
         state.last_success_at = completed_at
         state.last_duration_ms = duration_ms
         state.last_items_received = stats.items_received
         state.last_items_created = stats.listings_created
         state.last_items_updated = stats.listings_updated
-        state.consecutive_failures = 0
+        state.consecutive_failures = (
+            (state.consecutive_failures or 0) + 1 if result.partial_errors else 0
+        )
+        if result.partial_errors:
+            state.last_failure_at = completed_at
+            state.last_error_code = "partial_collection"
+            state.last_error = "Collecte partielle : " + ", ".join(result.partial_errors)
+            state.last_error_message = state.last_error
+            state.last_error_at = completed_at
         session.commit()
     logger.info(
         "market_sync",
@@ -207,7 +217,7 @@ async def _synchronize_platform(
             "event": "sync_completed",
             "market": platform,
             "mode": "live",
-            "status": "online",
+            "status": status,
             "duration_ms": duration_ms,
             "items_received": stats.items_received,
             "items_created": stats.listings_created,
@@ -216,8 +226,8 @@ async def _synchronize_platform(
     )
     return SyncRunSummary(
         platform=platform,
-        status="online",
-        message="Synchronisation réussie.",
+        status=status,
+        message=message,
         duration_ms=duration_ms,
         items_received=stats.items_received,
         items_created=stats.listings_created,

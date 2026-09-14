@@ -1,6 +1,7 @@
 """Read-only marketplace contract. No persistence or transaction side effects."""
 
 from abc import ABC, abstractmethod
+from collections.abc import Awaitable
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
@@ -160,6 +161,7 @@ class AdapterResult(AdapterDTO):
     buy_orders: list[AdapterBuyOrder] = Field(default_factory=list)
     fee_schedules: list[AdapterFeeSchedule] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    partial_errors: dict[str, str] = Field(default_factory=dict)
 
 
 class MarketAdapterError(Exception):
@@ -180,6 +182,18 @@ class ConfigurationError(MarketAdapterError):
 class UnsupportedCapabilityError(MarketAdapterError):
     def __init__(self, message: str) -> None:
         super().__init__("unsupported_capability", message)
+
+
+async def optional_enrichment[T](
+    result: AdapterResult, capability: str, request: Awaitable[list[T]]
+) -> list[T]:
+    try:
+        return await request
+    except (MarketAdapterError, ValueError, KeyError, TypeError) as error:
+        code = error.code if isinstance(error, MarketAdapterError) else "invalid_response"
+        result.partial_errors[capability] = code
+        result.warnings.append(f"Enrichissement {capability} indisponible ({code}).")
+        return []
 
 
 class MarketAdapter(ABC):

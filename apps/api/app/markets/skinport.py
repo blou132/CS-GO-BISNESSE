@@ -15,6 +15,7 @@ from .base import (
     MarketAdapter,
     MarketAdapterError,
     UnsupportedCapabilityError,
+    optional_enrichment,
 )
 from .http import ReadOnlyHTTP
 from .normalize import array_value, check_query, object_value
@@ -87,7 +88,12 @@ class SkinportAdapter(MarketAdapter):
         if malformed and malformed == len(rows):
             raise MarketAdapterError("invalid_response", "No valid Skinport aggregate data")
         if matched_names:
-            result.aggregates.extend(await self.get_sales_history(matched_names[:20]))
+            names = list(dict.fromkeys(matched_names))[:20]
+            result.aggregates.extend(
+                await optional_enrichment(result, "sales_history", self.get_sales_history(names))
+            )
+            if len(set(matched_names)) > 20:
+                result.warnings.append("Skinport: historique limité aux 20 premiers noms retenus.")
         return result
 
     async def get_listing(self, external_id: str) -> AdapterListing:
@@ -101,9 +107,11 @@ class SkinportAdapter(MarketAdapter):
         market_hash_names: str | list[str],
     ) -> list[AdapterAggregateStat]:
         names = [market_hash_names] if isinstance(market_hash_names, str) else market_hash_names
-        names = [check_query(name) for name in names if name.strip()]
+        names = list(dict.fromkeys(check_query(name) for name in names if name.strip()))
         if not names:
             return []
+        if len(names) > 20:
+            raise MarketAdapterError("invalid_query", "Skinport history is limited to 20 names")
         response = await self._http.get(
             "/sales/history",
             {
@@ -126,7 +134,7 @@ class SkinportAdapter(MarketAdapter):
                 row = object_value(value)
                 name = row["market_hash_name"]
                 currency = row["currency"]
-                if not isinstance(name, str) or not isinstance(currency, str):
+                if name not in names or currency != "EUR":
                     raise ValueError("Invalid Skinport history identity")
                 for source_window, window in periods.items():
                     stats = row.get(source_window)
@@ -148,6 +156,8 @@ class SkinportAdapter(MarketAdapter):
                     )
             except (KeyError, TypeError, ValueError):
                 continue
+        if rows and not result:
+            raise MarketAdapterError("invalid_response", "No valid Skinport history data")
         return result
 
 

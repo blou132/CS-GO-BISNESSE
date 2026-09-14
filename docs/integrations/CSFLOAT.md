@@ -2,7 +2,7 @@
 
 - Statut : `OFFICIAL_API`
 - Documentation officielle : <https://docs.csfloat.com/>
-- Vérification : 8 septembre 2026
+- Vérification documentaire : 13 septembre 2026
 - Base : `https://csfloat.com/api/v1`
 
 ## API et authentification
@@ -33,3 +33,23 @@ pas des ventes réalisées. Le contrat de normalisation, les filtres et les
 erreurs ont été validés avec des fixtures HTTP. L'appel live sans clé a confirmé le refus
 d'accès, mais aucune collecte d'annonce réelle n'est revendiquée faute de clé
 personnelle.
+
+## Validation de la reprise
+
+Une cle absente ou ne contenant que des espaces renvoie `not_configured`
+sans requete reseau. Les bornes prix/float inversees sont refusees avant
+appel ; les cents exigent un entier strict et `category` suit les valeurs
+officielles 0, 1, 2, 3. Les redirections ne transmettent pas la cle a un autre
+hote. Ces cas sont testes sur transport HTTP simule.
+
+Pour valider plus tard une cle fournie uniquement dans l'environnement,
+depuis `apps/api` avec les dependances installees :
+
+```bash
+python -m app.markets.smoke --platform csfloat --query 'AK-47 | Redline (Field-Tested)' --live
+```
+
+La commande ne charge pas `.env`, ne persiste rien, n'effectue aucune
+transaction et ne renvoie que compteurs et codes d'erreur. Code de sortie 0
+pour `online`, 2 pour collecte partielle, erreur ou configuration manquante.
+La validation live authentifiee reste `BLOCKED_EXTERNAL: CSFLOAT_API_KEY`.

@@ -21,6 +21,7 @@ from .base import (
     MarketAdapter,
     MarketAdapterError,
     UnsupportedCapabilityError,
+    optional_enrichment,
 )
 from .http import ReadOnlyHTTP
 from .normalize import (
@@ -110,9 +111,15 @@ class DMarketAdapter(MarketAdapter):
         if rows and not result.listings:
             raise MarketAdapterError("invalid_response", "No valid DMarket offers")
         if query and any(row.item.market_hash_name == query for row in result.listings):
-            result.buy_orders.extend(await self.get_buy_orders(query))
-            result.realized_sales.extend(await self.get_last_sales(query))
-            result.fee_schedules.extend(await self.get_fee_schedules())
+            result.buy_orders.extend(
+                await optional_enrichment(result, "buy_orders", self.get_buy_orders(query))
+            )
+            result.realized_sales.extend(
+                await optional_enrichment(result, "realized_sales", self.get_last_sales(query))
+            )
+            result.fee_schedules.extend(
+                await optional_enrichment(result, "fees", self.get_fee_schedules())
+            )
         return result
 
     async def get_listing(self, external_id: str) -> AdapterListing:
@@ -258,7 +265,7 @@ class DMarketAdapter(MarketAdapter):
             def_index=_optional_int(cs2.get("defIndex")),
             stattrak=(category == "CATEGORY_STATTRAK") if known_category else None,
             souvenir=(category == "CATEGORY_SOUVENIR") if known_category else None,
-            float_value=cs2.get("float") or None,
+            float_value=cs2.get("float") if cs2.get("float") != "" else None,
             paint_index=cs2.get("paintIndex"),
             paint_seed=cs2.get("paintSeed"),
             doppler_phase=phase,

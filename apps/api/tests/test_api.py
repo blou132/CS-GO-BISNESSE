@@ -45,6 +45,12 @@ def test_health_demo_and_live_are_isolated(tmp_path, monkeypatch) -> None:
             ecb = next(source for source in catalog if source["id"] == "ecb")
             assert ecb["configured"] is True
             assert ecb["runtime_status"] == "disabled"
+            sniper = next(source for source in catalog if source["id"] == "skinsniper")
+            assert sniper["source_type"] == "AGGREGATOR"
+            assert sniper["auth_required"] is None
+            assert sniper["api_discovery_status"] == "API_NOT_FOUND"
+            assert sniper["collected_capabilities"] == []
+            assert "MARKET_DISCOVERY_SOURCE" in sniper["roles"]
             net_profit = client.post(
                 "/api/calculations/net-profit",
                 json={

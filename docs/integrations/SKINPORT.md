@@ -3,7 +3,7 @@
 - Statut : `PARTIAL`
 - Documentation officielle : <https://docs.skinport.com/items>
 - Historique officiel étudié : <https://docs.skinport.com/sales/history>
-- Vérification : 8 septembre 2026
+- Vérification : 13 septembre 2026
 - Base : `https://api.skinport.com/v1`
 
 ## API et authentification
@@ -36,6 +36,31 @@ supportés. Son normaliseur typé alimente le contrat commun en listings exacts
 ou ventes réalisées à partir du `saleId`. Le transport Socket.IO/MessagePack,
 la reconnexion et la file bornée ne sont pas activés : ils doivent être validés
 séparément avant toute exécution 24/7.
+
+La relecture du 13 septembre montre un ecart entre l'ancien normaliseur et
+l'[exemple officiel](https://docs.skinport.com/websocket/sale-feed) : `currency`
+est par vente, `saleId` peut etre nul et `url` peut etre un slug. Les unites
+exactes de `salePrice` doivent etre confirmees avant raccordement. Les fixtures
+precedentes ne prouvent pas la compatibilite du feed actuel. Le registre exclut
+donc `WEBSOCKET` et `REALIZED_SALES` des capacites collectees Skinport.
+
+## Validation REST du 13 septembre
+
+Le pacing normal de 38 secondes ne declenche plus un faux `rate_limited`
+local. Les HTTP 429 et les delais `Retry-After` restent respectes. Un echec
+d'historique conserve les observations de prix et marque la collecte
+`degraded`. Les noms/devise de l'historique sont controles, les lots limites a 20.
+
+Le smoke test read-only du code de travail a reussi : 2 observations d'offre,
+8 statistiques historiques (quatre fenetres pour chaque nom retenu), aucun
+listing individuel ni vente unitaire, aucune ecriture en base. La recherche
+REST reste une recherche par sous-chaine et peut inclure une variante StatTrak.
+
+Commande de verification explicite, depuis `apps/api` avec les dependances :
+
+```bash
+python -m app.markets.smoke --platform skinport --query 'AK-47 | Redline (Field-Tested)' --live
+```
 
 Les contrats REST et le normaliseur du feed ont été validés sur fixtures. Un appel live
 de `GET /items` a réussi en HTTP 200 le 5 septembre 2026. L'observation ainsi

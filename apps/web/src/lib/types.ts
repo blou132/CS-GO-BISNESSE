@@ -51,7 +51,7 @@ export interface ScannerRow {
 export interface MarketStatus {
   platform: Platform;
   integration_status: "OFFICIAL_API" | "SUPPORTED" | "PARTIAL" | "RESEARCH_REQUIRED" | "UNAVAILABLE";
-  status: "online" | "not_configured" | "unavailable" | "error" | "stale" | "very_stale" | "demo" | "idle";
+  status: "online" | "degraded" | "not_configured" | "unavailable" | "error" | "stale" | "very_stale" | "demo" | "idle";
   message: string;
   freshness: "fresh" | "stale" | "very_stale" | "unknown";
   configured: boolean;

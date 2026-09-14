@@ -68,7 +68,7 @@ h2 { margin: 0; font-size: 17px; letter-spacing: -.02em; }
 .topbar-actions { display: flex; align-items: center; gap: 9px; }
 .mode-badge, .currency-badge, .status-badge { display: inline-flex; align-items: center; gap: 7px; min-height: 27px; padding: 0 9px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: #b9c0bd; font: 600 9px var(--mono); letter-spacing: .06em; }
 .mode-badge i, .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted-2); }
-.mode-badge.demo i, .status-dot.demo { background: var(--amber); }.mode-badge.live i, .status-dot.online { background: var(--teal); }
+.mode-badge.demo i, .status-dot.demo, .status-dot.degraded { background: var(--amber); }.mode-badge.live i, .status-dot.online { background: var(--teal); }
 .currency-badge span { color: var(--muted-2); font-weight: 400; letter-spacing: 0; }
 .main-content { width: min(1540px, 100%); margin: 0 auto; flex: 1; padding: 34px 34px 48px; }
 .footer { min-height: 42px; display: flex; align-items: center; justify-content: space-between; padding: 0 34px; color: var(--muted-2); border-top: 1px solid var(--line-soft); font-size: 10px; }

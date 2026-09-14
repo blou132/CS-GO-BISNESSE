@@ -36,6 +36,10 @@ def build_market_monitor(
         warnings.append("Une ou plusieurs plateformes optionnelles attendent leurs clés serveur.")
     if any(status.status in {"error", "unavailable"} for status in statuses):
         warnings.append("Une ou plusieurs plateformes ont échoué lors de la dernière tentative.")
+    if any(status.status == "degraded" for status in statuses):
+        warnings.append(
+            "Collecte partielle : certaines données complémentaires sont indisponibles."
+        )
     if any(status.status in {"stale", "very_stale"} for status in statuses):
         warnings.append("Une ou plusieurs plateformes ont des données anciennes.")
 
