@@ -5,10 +5,59 @@ import httpx
 import pytest
 from nacl.signing import SigningKey
 
-from app.markets import CSFloatSearch, DMarketAdapter, SkinportAdapter
+from app.markets import CSFloatAdapter, CSFloatSearch, DMarketAdapter, SkinportAdapter
 from app.markets import http as market_http
 from app.markets.base import MarketAdapterError
 from app.markets.http import ReadOnlyHTTP
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("platform", ["csfloat", "dmarket"])
+@pytest.mark.parametrize(
+    "status,code",
+    [
+        (401, "authentication"),
+        (403, "authentication"),
+        (429, "rate_limited"),
+        (500, "unavailable"),
+        (502, "unavailable"),
+        (503, "unavailable"),
+        (200, "invalid_response"),
+        (0, "timeout"),
+    ],
+)
+async def test_authenticated_adapters_fail_closed_without_leaking_payload(platform, status, code):
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        assert request.method == "GET"
+        if status == 0:
+            raise httpx.ReadTimeout("TEST_PRIVATE", request=request)
+        return httpx.Response(status, text="TEST_PRIVATE", headers={"Retry-After": "600"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        key = SigningKey.generate()
+        adapter = (
+            CSFloatAdapter("TEST_ONLY", client=client)
+            if platform == "csfloat"
+            else DMarketAdapter(bytes(key.verify_key).hex(), bytes(key).hex(), client=client)
+        )
+        adapter._http.max_attempts = 1
+        with pytest.raises(MarketAdapterError) as error:
+            await adapter.search_items("TEST Skin")
+    assert error.value.code == code
+    assert "TEST_PRIVATE" not in str(error.value)
+    assert len(calls) == 1
+
+
+def test_csfloat_cursor_is_explicit_bounded_and_not_auto_paginated():
+    assert (
+        CSFloatSearch(cursor="documented-opaque-cursor").parameters()["cursor"]
+        == "documented-opaque-cursor"
+    )
+    with pytest.raises(ValueError):
+        CSFloatSearch(cursor="x" * 513)
 
 
 @pytest.mark.asyncio

@@ -53,3 +53,13 @@ La commande ne charge pas `.env`, ne persiste rien, n'effectue aucune
 transaction et ne renvoie que compteurs et codes d'erreur. Code de sortie 0
 pour `online`, 2 pour collecte partielle, erreur ou configuration manquante.
 La validation live authentifiee reste `BLOCKED_EXTERNAL: CSFLOAT_API_KEY`.
+
+## V0.11 : validation du 14-15 septembre 2026
+
+La variable est toujours absente dans la configuration de production prevue.
+Les cas 401, 403, 429, 500, 502, 503, timeout et JSON invalide sont couverts
+sans fuite de corps upstream. Le parametre officiel `cursor` est accepte
+explicitement, borne a 512 caracteres ; aucune boucle de pagination n'est
+ajoutee. L'emplacement du prochain curseur dans une reponse reelle reste a
+confirmer avec une cle, la documentation donnant surtout un exemple de liste.
+Ni pagination live, ni float/stickers live, ni quota observe ne sont revendiques.

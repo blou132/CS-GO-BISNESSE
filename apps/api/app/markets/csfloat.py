@@ -48,9 +48,7 @@ class CSFloatAdapter(MarketAdapter):
         payload = response.payload
         rows = array_value(payload.get("data") if isinstance(payload, dict) else payload)
         result = AdapterResult(
-            warnings=[
-                "CSFloat: première page uniquement, 50 annonces maximum; recherche par nom exact."
-            ]
+            warnings=["CSFloat: une page uniquement, 50 annonces maximum; recherche par nom exact."]
         )
         for row in rows:
             try:
@@ -140,6 +138,7 @@ class CSFloatSearch(BaseModel):
         Literal["lowest_price", "most_recent", "lowest_float", "best_deal", "float_rank"] | None
     ) = None
     limit: int = Field(default=50, ge=1, le=50)
+    cursor: str | None = Field(default=None, min_length=1, max_length=512, pattern=r"^\S+$")
 
     @model_validator(mode="after")
     def validate_ranges(self) -> "CSFloatSearch":
@@ -163,6 +162,7 @@ class CSFloatSearch(BaseModel):
             "type": "buy_now",
         }
         fields = {
+            "cursor": self.cursor,
             "market_hash_name": self.market_hash_name,
             "min_price": self.min_price_cents,
             "max_price": self.max_price_cents,

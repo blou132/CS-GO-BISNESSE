@@ -57,3 +57,12 @@ python -m app.markets.smoke --platform dmarket --query 'AK-47 | Redline (Field-T
 Pas de lecture de `.env`, d'ecriture en base, de sortie de secrets ni de
 transaction. Code 0 pour `online`, 2 sinon. Sans paire de cles,
 `not_configured` est confirme ; l'appel authentifie reste `BLOCKED_EXTERNAL`.
+
+## V0.11 : validation du 14-15 septembre 2026
+
+Les deux variables restent absentes dans la configuration prevue. La matrice
+401/403/429/500/502/503/timeout/JSON invalide est testee au niveau adaptateur,
+en plus des tests de signature et de collecte partielle existants. Aucune
+signature authentifiee reelle ni lecture live des offres, targets, ventes ou
+frais n'est revendiquee. Ne pas qualifier les fees de valides en compte reel
+sur la seule base des fixtures.
