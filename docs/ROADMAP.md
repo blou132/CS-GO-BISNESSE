@@ -5,6 +5,12 @@ complète à la première livraison. Une intégration testée sur fixtures n'est
 pas une intégration validée avec un compte réel. Voir `VALIDATION.md` pour
 les preuves d'exécution de cette passe.
 
+Passe de consolidation V0.11 du 15 septembre 2026 : transport realtime,
+ingestion idempotente, provenance et tests locaux termines. Les validations
+live CSFloat/DMarket restent bloquees par les cles absentes ; le flux Skinport
+par HTTP 403 et le contrat d'unite a confirmer. Aucun deploiement automatique.
+Voir [le rapport live](LIVE_MARKETS_REPORT_2026-09-15.md).
+
 | Version | Périmètre | Condition de validation |
 | --- | --- | --- |
 | V0.1 | FastAPI, Next.js, PostgreSQL, Compose, configuration, healthchecks, migrations, tests et lint | Lancement local et contrôles reproductibles |

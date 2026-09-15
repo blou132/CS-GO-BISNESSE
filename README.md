@@ -75,6 +75,9 @@ Toutes les variables sont décrites dans [.env.example](.env.example).
 | `MARKET_SYNC_QUERY` | Avec monitoring | Nom de skin collecté en continu |
 | `CSFLOAT_SYNC_INTERVAL_SECONDS` | Facultative | Intervalle du scheduler CSFloat |
 | `SKINPORT_SYNC_INTERVAL_SECONDS` | Facultative | Intervalle du scheduler Skinport |
+| `SKINPORT_REALTIME_ENABLED` | Facultative | Flux optionnel, `false` par defaut ; validation live encore bloquee |
+| `SKINPORT_REALTIME_PRICE_UNIT*` | Avec flux | Unite et source verifiees avant toute ingestion |
+| `FLOAT_MIN_SAMPLES` | Facultative | Minimum de comparables pour le percentile, 5 par defaut |
 | `DMARKET_SYNC_INTERVAL_SECONDS` | Facultative | Intervalle du scheduler DMarket |
 | `CSFLOAT_API_KEY` | CSFloat live | Clé API transmise côté serveur |
 | `DMARKET_PUBLIC_KEY` | DMarket | Clé publique Ed25519 |

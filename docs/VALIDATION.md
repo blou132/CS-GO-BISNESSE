@@ -1,6 +1,7 @@
 # Validation — 7 septembre 2026
 
-Rapport plus récent : [sources, SkinSniper et valorisation du 14 septembre](SOURCES_VALUATION_REPORT_2026-09-14.md).
+Dernier rapport : [V0.11, live et realtime du 15 septembre](LIVE_MARKETS_REPORT_2026-09-15.md).
+Rapport precedent : [sources, SkinSniper et valorisation du 14 septembre](SOURCES_VALUATION_REPORT_2026-09-14.md).
 Le présent document conserve les preuves historiques de la première mise en service.
 
 ## Environnement de contrôle

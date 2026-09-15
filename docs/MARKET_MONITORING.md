@@ -1,5 +1,10 @@
 # Monitoring marché 24/7
 
+Depuis la consolidation V0.11, un [collecteur realtime optionnel](REALTIME_INGESTION.md)
+peut completer REST. Il est desactive par defaut et non valide en live.
+`/api/market-monitor` separe `platforms` (REST) de `realtime.skinport` (flux).
+Les erreurs et compteurs du flux ne remplacent pas l'etat REST.
+
 Le Continuous Market Monitoring est un scheduler intégré à l'API FastAPI.
 Il reste simple : pas de Redis, pas de Celery, pas de service système hôte.
 Il tourne seulement quand l'API tourne et quand `MARKET_SYNC_ENABLED=true`.
