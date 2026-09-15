@@ -109,6 +109,16 @@ input::placeholder { color: #4e5854; }
 .panel { margin-bottom: 18px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
 .panel-heading { min-height: 67px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 15px 18px; border-bottom: 1px solid var(--line-soft); }.panel-heading .eyebrow { margin-bottom: 7px; }.panel-heading h2 { font-size: 15px; }
 .table-scroll { overflow: auto; outline: none; }.table-scroll:focus { box-shadow: inset 0 0 0 1px rgba(183,238,67,.5); }
+.evidence-section { min-width: 0; margin-bottom: 24px; padding-block: 14px; border-block: 1px solid var(--line); letter-spacing: 0; }
+.evidence-section h2 { font-size: 16px; }
+.evidence-section .panel-heading > strong { font-size: 12px; overflow-wrap: anywhere; }
+.stream-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: 16px; margin: 12px 0 20px; }
+.stream-metrics > div { min-width: 0; }
+.stream-metrics dt { color: var(--muted); font-size: 11px; margin-bottom: 6px; }
+.stream-metrics dd { margin: 0; font-size: 13px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.evidence-table { width: 100%; min-width: 850px; table-layout: fixed; }
+.evidence-table th, .evidence-table td { padding: 12px; text-align: left; font-size: 11px; vertical-align: top; overflow-wrap: anywhere; white-space: normal; border-bottom: 1px solid var(--line-soft); }
+.evidence-table small { display: block; color: var(--muted); margin-top: 6px; }
 .listings-table { width: 100%; min-width: 1260px; border-collapse: collapse; }
 .listings-table th { height: 42px; padding: 0 13px; color: var(--muted-2); border-bottom: 1px solid var(--line-soft); background: #0d1110; text-align: left; font: 600 8px var(--mono); letter-spacing: .07em; text-transform: uppercase; white-space: nowrap; }.listings-table th span { display: block; font-size: 7px; }.listings-table td { min-height: 64px; padding: 11px 13px; border-bottom: 1px solid var(--line-soft); color: #bcc4c0; font-size: 11px; }.listings-table tbody tr:last-child td { border-bottom: 0; }.listings-table tbody tr:hover { background: rgba(255,255,255,.015); }
 .numeric-cell { text-align: right !important; font-family: var(--mono); white-space: nowrap; }.numeric-cell.strong { color: var(--text); font-weight: 700; }.muted { color: var(--muted) !important; }.mono { font-family: var(--mono); }

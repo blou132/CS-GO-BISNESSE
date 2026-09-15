@@ -1,4 +1,15 @@
 import type { MarketMonitorData, MarketStatus } from "./types";
+import type { RealtimeStatus } from "./realtime-types";
+
+export function realtimeLabel(state: RealtimeStatus): string {
+  if (!state.enabled) return "Désactivé";
+  if (state.status === "online" && !state.last_success_at) return "En attente de données";
+  const labels: Record<RealtimeStatus["status"], string> = {
+    disabled: "Désactivé", connecting: "Connexion", connected: "Connecté, ingestion en attente",
+    online: "En ligne", degraded: "Dégradé", disconnected: "Déconnecté", stopped: "Arrêté",
+  };
+  return labels[state.status];
+}
 
 export function monitorSummary(monitor: MarketMonitorData | null) {
   const metrics = monitor?.metrics;

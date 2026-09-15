@@ -1,3 +1,5 @@
+import type { RealtimeStatus, ValuationProvenance } from "./realtime-types";
+
 export type Mode = "live" | "demo";
 export type Platform = "csfloat" | "skinport" | "dmarket";
 export type LiquidityCategory = "VERY_LOW" | "LOW" | "MEDIUM" | "HIGH" | "VERY_HIGH";
@@ -123,6 +125,7 @@ export interface MarketMetrics {
 }
 
 export interface MarketMonitorData {
+  realtime?: Record<string, RealtimeStatus>;
   mode: "live";
   sync_enabled: boolean;
   sync_query_configured: boolean;
@@ -208,6 +211,7 @@ export interface CurrentMarketSnapshot {
 }
 
 export interface ItemData {
+  provenance?: ValuationProvenance | null;
   mode: Mode;
   item: ScannerRow;
   comparisons: Comparison[];

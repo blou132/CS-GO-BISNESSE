@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { hasBlockingMarketFailure, marketOperationalLabel, monitorSummary } from "./monitor";
+import { hasBlockingMarketFailure, marketOperationalLabel, monitorSummary, realtimeLabel } from "./monitor";
+import type { RealtimeStatus } from "./realtime-types";
 import type { MarketMonitorData, MarketStatus } from "./types";
 
 const market: MarketStatus = {
@@ -45,6 +46,18 @@ const monitor: MarketMonitorData = {
 };
 
 describe("market monitor helpers", () => {
+  it("keeps REST healthy when the optional stream is disconnected", () => {
+    const stream = { enabled: true, status: "disconnected", last_success_at: null } as RealtimeStatus;
+    expect(realtimeLabel(stream)).toBe("Déconnecté");
+    expect(hasBlockingMarketFailure({ ...monitor, realtime: { skinport: stream } })).toBe(false);
+  });
+
+  it("requires an ingestion success before showing online", () => {
+    const stream = { enabled: true, status: "online", last_success_at: null } as RealtimeStatus;
+    expect(realtimeLabel(stream)).toBe("En attente de données");
+    expect(realtimeLabel({ ...stream, enabled: false })).toBe("Désactivé");
+    expect(realtimeLabel({ ...stream, last_success_at: "2026-09-14T12:00:00Z" })).toBe("En ligne");
+  });
   it("résume l'état système et les métriques principales", () => {
     expect(monitorSummary(monitor)).toMatchObject({
       scheduler: "Actif",
