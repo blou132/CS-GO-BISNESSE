@@ -4,6 +4,19 @@ from pydantic import ValidationError
 from app.core.config import Settings
 
 
+def test_realtime_is_opt_in_bounded_and_requires_narrow_scope_and_unit_provenance():
+    assert not Settings(_env_file=None).skinport_realtime_enabled
+    for values in [
+        {"skinport_realtime_enabled": True},
+        {"skinport_realtime_queue_size": 0},
+        {"skinport_realtime_queue_size": 5001},
+        {"skinport_realtime_price_unit": "minor"},
+        {"float_min_samples": 4},
+    ]:
+        with pytest.raises(ValidationError):
+            Settings(_env_file=None, **values)
+
+
 def test_empty_optional_environment_values_are_treated_as_absent(monkeypatch) -> None:
     monkeypatch.setenv("CSFLOAT_API_KEY", "")
     monkeypatch.setenv("DMARKET_PUBLIC_KEY", "")

@@ -169,6 +169,33 @@ class MarketMetrics(BaseModel):
     average_freshness_seconds: int | None = None
 
 
+class RealtimeStatus(BaseModel):
+    enabled: bool = False
+    status: Literal[
+        "disabled", "connecting", "connected", "online", "degraded", "disconnected", "stopped"
+    ] = "disabled"
+    connected: bool = False
+    connected_since: datetime | None = None
+    last_attempt_at: datetime | None = None
+    last_success_at: datetime | None = None
+    last_event_at: datetime | None = None
+    next_retry_at: datetime | None = None
+    http_status: int | None = None
+    events_received: int = 0
+    events_per_minute: int = 0
+    reconnect_count: int = 0
+    queue_depth: int = 0
+    dropped_events: int = 0
+    invalid_events: int = 0
+    filtered_events: int = 0
+    duplicate_events: int = 0
+    listings_updated: int = 0
+    sales_received: int = 0
+    errors: int = 0
+    last_error: str | None = None
+    last_batch_duration_ms: int | None = None
+
+
 class MarketMonitor(BaseModel):
     mode: Mode = "live"
     sync_enabled: bool
@@ -177,6 +204,7 @@ class MarketMonitor(BaseModel):
     platforms: list[MarketStatus]
     metrics: MarketMetrics
     warnings: list[str]
+    realtime: dict[str, RealtimeStatus] = Field(default_factory=dict)
 
 
 class MarketSourceInfo(BaseModel):
@@ -255,12 +283,42 @@ class CurrentMarketSnapshot(BaseModel):
     freshness: Freshness = "unknown"
 
 
+class EvidenceSource(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    platform: str
+    kind: str
+    value_eur: Decimal | None
+    observed_at: datetime
+    volume: int | None = None
+    window: str | None = None
+    record_id: str | None = None
+    external_id: str | None = None
+    price_original: Decimal | None = None
+    currency: str | None = None
+    fx_source: str | None = None
+    fx_timestamp: datetime | None = None
+    timestamp_basis: str | None = None
+
+
+class ValuationProvenance(BaseModel):
+    buy: EvidenceSource
+    reference: list[EvidenceSource]
+    reference_sample_size: int
+    comparable_count: int
+    float_min_samples: int
+    float_status: Literal["AVAILABLE", "INSUFFICIENT_DATA"]
+    fee_status: Literal["UNKNOWN", "DEMO_SYNTHETIC"]
+    effective_fx_status: Literal["UNKNOWN"] = "UNKNOWN"
+    eligibility: Literal["REFERENCE_ONLY", "DEMO"]
+
+
 class ItemDetail(BaseModel):
     mode: Mode
     item: ScannerRow
     comparisons: list[Comparison]
     market_snapshots: list[CurrentMarketSnapshot] = Field(default_factory=list)
     history: list[Observation]
+    provenance: ValuationProvenance | None = None
     warnings: list[str]
 
 

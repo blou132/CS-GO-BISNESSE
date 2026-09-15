@@ -16,6 +16,7 @@ from app.models import (
 )
 from app.schemas.api import MarketMetrics, MarketMonitor, MarketStatus
 from app.services.analysis import market_statuses
+from app.services.freshness import fresh_listing
 
 
 def build_market_monitor(
@@ -48,12 +49,14 @@ def build_market_monitor(
         sync_query_configured=bool(settings.market_sync_query.strip()),
         scheduler_running=scheduler_running,
         platforms=statuses,
-        metrics=_metrics(session, "live", statuses),
+        metrics=_metrics(session, "live", statuses, settings),
         warnings=warnings,
     )
 
 
-def _metrics(session: Session, mode: str, statuses: list[MarketStatus]) -> MarketMetrics:
+def _metrics(
+    session: Session, mode: str, statuses: list[MarketStatus], settings: Settings
+) -> MarketMetrics:
     now = datetime.now(UTC)
     day_ago = now - timedelta(hours=24)
     success_times = [
@@ -73,7 +76,11 @@ def _metrics(session: Session, mode: str, statuses: list[MarketStatus]) -> Marke
             session,
             select(func.count())
             .select_from(MarketListing)
-            .where(MarketListing.mode == mode, MarketListing.status == "ACTIVE"),
+            .where(
+                MarketListing.mode == mode,
+                MarketListing.status == "ACTIVE",
+                fresh_listing(settings),
+            ),
         ),
         price_observations=_count(
             session,
@@ -99,7 +106,13 @@ def _metrics(session: Session, mode: str, statuses: list[MarketStatus]) -> Marke
             session,
             select(func.count())
             .select_from(MarketOpportunity)
-            .where(MarketOpportunity.mode == mode, MarketOpportunity.status == "ACTIVE"),
+            .join(MarketListing, MarketOpportunity.listing_id == MarketListing.id)
+            .where(
+                MarketOpportunity.mode == mode,
+                MarketOpportunity.status == "ACTIVE",
+                MarketListing.status == "ACTIVE",
+                fresh_listing(settings),
+            ),
         ),
         sync_errors_24h=_count(
             session,

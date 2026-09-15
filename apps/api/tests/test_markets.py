@@ -134,13 +134,14 @@ async def test_skinport_keeps_aggregate_separate_from_listings() -> None:
 def test_skinport_sale_feed_keeps_listings_and_realized_sales_distinct() -> None:
     observed_at = datetime.now(UTC)
     common = {
-        "currency": "EUR",
         "sales": [
             {
+                "appid": 730,
+                "currency": "EUR",
                 "saleId": 123,
-                "assetId": "asset-1",
+                "assetid": "asset-1",
                 "marketHashName": "AK-47 | Redline (Field-Tested)",
-                "salePrice": 24.5,
+                "salePrice": 2450,
                 "wear": 0.22,
                 "pattern": 412,
                 "finish": 282,
@@ -151,8 +152,9 @@ def test_skinport_sale_feed_keeps_listings_and_realized_sales_distinct() -> None
             }
         ],
     }
-    listed = normalize_sale_feed({"eventType": "listed", **common}, observed_at)
-    sold = normalize_sale_feed({"eventType": "sold", **common}, observed_at)
+    units = {"price_unit": "minor", "price_unit_source": "https://example.test/verified-fixture"}
+    listed = normalize_sale_feed({"eventType": "listed", **common}, observed_at, **units)
+    sold = normalize_sale_feed({"eventType": "sold", **common}, observed_at, **units)
 
     assert listed.realized_sales == []
     assert listed.listings[0].external_id == "123"

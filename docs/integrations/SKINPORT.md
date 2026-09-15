@@ -34,8 +34,8 @@ Le Sale Feed officiel utilise Socket.IO avec un parser MessagePack et publie
 des événements `listed` et `sold`. `price_changed` et `canceled` ne sont pas
 supportés. Son normaliseur typé alimente le contrat commun en listings exacts
 ou ventes réalisées à partir du `saleId`. Le transport Socket.IO/MessagePack,
-la reconnexion et la file bornée ne sont pas activés : ils doivent être validés
-séparément avant toute exécution 24/7.
+la reconnexion et la file bornée sont implementes et testes localement en
+V0.11, mais restent desactives. Voir [l'exploitation du flux](../REALTIME_INGESTION.md).
 
 La relecture du 13 septembre montre un ecart entre l'ancien normaliseur et
 l'[exemple officiel](https://docs.skinport.com/websocket/sale-feed) : `currency`
@@ -65,3 +65,13 @@ python -m app.markets.smoke --platform skinport --query 'AK-47 | Redline (Field-
 Les contrats REST et le normaliseur du feed ont été validés sur fixtures. Un appel live
 de `GET /items` a réussi en HTTP 200 le 5 septembre 2026. L'observation ainsi
 collectée reste un agrégat et n'est jamais présentée comme une vente unitaire.
+
+## V0.11 : flux non valide en live
+
+Le probe officiel du 14 septembre 2026 a 20:57 UTC renvoie HTTP 403,
+aucun evenement recu. Aucun contournement tente. Les contrats d'unite et
+d'identifiant nullable restent a confirmer avec Skinport avant activation.
+Le normaliseur refuse les prix non verifies, conserve `assetid` Steam, et
+n'invente ni URL d'annonce depuis un slug ni date de vente fournisseur.
+Les tests locaux couvrent le protocole reel contre un serveur de test,
+la reconnexion, les doublons, l'expiration et la persistance PostgreSQL.

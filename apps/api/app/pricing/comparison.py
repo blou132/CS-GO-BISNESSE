@@ -22,9 +22,13 @@ def summarize(prices: Sequence[Decimal]) -> PriceSummary | None:
     )
 
 
-def float_score(value: Decimal | None, peers: Sequence[Decimal]) -> int | None:
+def float_score(
+    value: Decimal | None, peers: Sequence[Decimal], *, min_samples: int = 5
+) -> int | None:
     """Rang inversé avec ex aequo à mi-rang ; au moins cinq exemplaires comparables."""
-    if value is None or len(peers) < 5:
+    if min_samples < 5:
+        raise ValueError("At least five comparable samples are required.")
+    if value is None or len(peers) < min_samples:
         return None
     if any(not number.is_finite() or not 0 <= number <= 1 for number in [value, *peers]):
         raise ValueError("Float hors intervalle [0, 1].")

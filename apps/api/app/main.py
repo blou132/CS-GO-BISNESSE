@@ -47,6 +47,7 @@ from app.services.demo import ensure_demo
 from app.services.fees import calculate_stored_fee
 from app.services.health import system_health
 from app.services.monitoring import build_market_monitor
+from app.services.realtime import SkinportRealtime
 from app.services.scanner import ScannerQuery, build_scanner_page
 from app.services.scheduler import MarketSyncScheduler
 from app.services.sync import (
@@ -77,11 +78,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.sync_coordinator,
     )
     app.state.fx_scheduler = FXRateScheduler(app.state.sessions, settings)
+    app.state.skinport_realtime = SkinportRealtime(app.state.sessions, settings)
     await app.state.market_scheduler.start()
     await app.state.fx_scheduler.start()
+    await app.state.skinport_realtime.start()
     try:
         yield
     finally:
+        await app.state.skinport_realtime.stop()
         await app.state.fx_scheduler.stop()
         await app.state.market_scheduler.stop()
         await close_adapters(app.state.adapters)
@@ -212,6 +216,7 @@ def scanner(
             max_risk=max_risk,
             max_spread=max_spread,
         ),
+        settings,
     )
 
 
@@ -305,14 +310,21 @@ def watch_rule_matches(
         raise HTTPException(status_code=409, detail="Cette règle est en pause.")
     if mode == "demo":
         ensure_demo(session, settings)
-    return build_scanner_page(session, matching_query(rule, mode, page, page_size, sort))
+    return build_scanner_page(session, matching_query(rule, mode, page, page_size, sort), settings)
 
 
 @app.get("/api/market-monitor", response_model=MarketMonitor, tags=["analysis"])
 def market_monitor(request: Request, session: DbSession, settings: SettingsDep) -> MarketMonitor:
     scheduler = getattr(request.app.state, "market_scheduler", None)
     scheduler_running = bool(scheduler and scheduler.running)
-    return build_market_monitor(session, settings, scheduler_running=scheduler_running)
+    result = build_market_monitor(session, settings, scheduler_running=scheduler_running)
+    stream = request.app.state.skinport_realtime.snapshot()
+    result.realtime["skinport"] = stream
+    if stream.enabled and stream.status in {"degraded", "disconnected"}:
+        result.warnings.append(
+            "Skinport temps reel indisponible ou incomplet ; etat REST independant."
+        )
+    return result
 
 
 @app.get("/api/integrations", response_model=IntegrationCatalog, tags=["analysis"])

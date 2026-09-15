@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from statistics import median
@@ -31,6 +31,13 @@ class MarketEvidence:
     observed_at: datetime
     volume: int | None = None
     window: str | None = None
+    record_id: str | None = None
+    external_id: str | None = None
+    price_original: Decimal | None = None
+    currency: str | None = None
+    fx_source: str | None = None
+    fx_timestamp: datetime | None = None
+    timestamp_basis: str | None = None
 
 
 @dataclass(frozen=True)
@@ -59,6 +66,7 @@ class ReferencePrice:
     method: ReferenceMethod
     sources: tuple[str, ...]
     sample_size: int
+    evidence: tuple[MarketEvidence, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -188,6 +196,7 @@ def calculate_reference_price(
             method=method,
             sources=tuple(sorted({f"{item.platform}:{item.kind}" for item in selected})),
             sample_size=len(selected),
+            evidence=tuple(selected),
         )
     return None
 
@@ -367,14 +376,7 @@ def _validate_evidence(item: MarketEvidence, now: datetime) -> MarketEvidence:
         raise ValueError("Une preuve de prix ne peut pas être datée dans le futur.")
     if item.volume is not None and item.volume < 0:
         raise ValueError("Le volume doit être positif ou nul.")
-    return MarketEvidence(
-        platform=item.platform,
-        kind=item.kind,
-        value_eur=item.value_eur,
-        observed_at=observed_at,
-        volume=item.volume,
-        window=item.window,
-    )
+    return replace(item, observed_at=observed_at)
 
 
 def _recent(

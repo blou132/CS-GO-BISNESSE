@@ -17,6 +17,7 @@ from app.models.entities import (
     TradeQuote,
     WatchRule,
 )
+from app.models.realtime import RealtimeReceipt
 
 __all__ = [
     "AggregateMarketStat",
@@ -34,6 +35,7 @@ __all__ = [
     "PlatformFeeSchedule",
     "PriceObservation",
     "RealizedSale",
+    "RealtimeReceipt",
     "TradeQuote",
     "WatchRule",
 ]

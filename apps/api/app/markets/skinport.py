@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
-from decimal import Decimal
-from typing import Any
+from decimal import Decimal, DecimalException
+from typing import Any, Literal
+from urllib.parse import urlparse
 
 import httpx
 
@@ -161,26 +162,38 @@ class SkinportAdapter(MarketAdapter):
         return result
 
 
-def normalize_sale_feed(value: Any, observed_at: datetime) -> AdapterResult:
+def normalize_sale_feed(
+    value: Any,
+    observed_at: datetime,
+    *,
+    price_unit: Literal["unverified", "minor", "major"] = "unverified",
+    price_unit_source: str = "",
+) -> AdapterResult:
     payload = object_value(value)
     event_type = payload.get("eventType")
-    if event_type not in {"listed", "sold"}:
+    if not isinstance(event_type, str) or event_type not in {"listed", "sold"}:
         raise ValueError("Unsupported Skinport sale feed event")
-    currency = payload.get("currency")
-    if not isinstance(currency, str):
-        raise ValueError("Missing Skinport sale feed currency")
+    if price_unit == "unverified" or not price_unit_source.startswith("https://"):
+        raise ValueError("unverified_price_unit")
     rows = array_value(payload.get("sales"))
     result = AdapterResult()
     for value in rows:
         try:
             row = object_value(value)
             external_id = _string_identifier(row.get("saleId"))
+            if not external_id.isascii() or not external_id.isdecimal() or int(external_id) <= 0:
+                raise ValueError("Invalid sale ID")
+            if row.get("appid") != 730 or row.get("currency") != "EUR":
+                raise ValueError("Unexpected feed game or currency")
+            if row.get("saleStatus") not in {None, event_type}:
+                raise ValueError("Conflicting sale status")
+            currency = row["currency"]
             name = row["marketHashName"]
             if not isinstance(name, str) or not name.strip():
                 raise ValueError("Missing Skinport item name")
             item = AdapterItem(
                 market_hash_name=name,
-                asset_id=_optional_identifier(row.get("assetId") or row.get("assetid")),
+                asset_id=_optional_identifier(row.get("assetid")),
                 float_value=row.get("wear"),
                 paint_index=row.get("finish"),
                 paint_seed=row.get("pattern"),
@@ -191,10 +204,33 @@ def normalize_sale_feed(value: Any, observed_at: datetime) -> AdapterResult:
                 quality=row.get("quality"),
                 collection=row.get("collection"),
                 inspect_link=row.get("link"),
-                source_attributes=_source_attributes(row),
+                source_attributes={
+                    **_source_attributes(row),
+                    "timestamp_basis": "feed_observed_at",
+                    "price_unit": price_unit,
+                    "price_unit_source": price_unit_source,
+                },
                 stickers=_stickers(row.get("stickers")),
+                tradable_at=datetime.fromisoformat(row["lock"].replace("Z", "+00:00"))
+                if isinstance(row.get("lock"), str)
+                else None,
             )
-            price = Decimal(str(row["salePrice"]))
+            raw_price = row["salePrice"]
+            if isinstance(raw_price, bool) or (
+                price_unit == "minor" and not isinstance(raw_price, int)
+            ):
+                raise ValueError("Invalid price unit")
+            price = Decimal(str(raw_price)) / (100 if price_unit == "minor" else 1)
+            if not price.is_finite() or not 0 < price <= Decimal("999999999999.99999999"):
+                raise ValueError("Invalid price")
+            url = row.get("url")
+            listing_url = (
+                url
+                if isinstance(url, str)
+                and urlparse(url).scheme == "https"
+                and urlparse(url).netloc == "skinport.com"
+                else None
+            )
             if event_type == "listed":
                 result.listings.append(
                     AdapterListing(
@@ -202,7 +238,8 @@ def normalize_sale_feed(value: Any, observed_at: datetime) -> AdapterResult:
                         item=item,
                         price=price,
                         currency=currency,
-                        listing_url=row.get("url"),
+                        listing_url=listing_url,
+                        warnings=["Horodatage de reception du feed ; annonce non revalidee."],
                         observed_at=observed_at,
                     )
                 )
@@ -220,10 +257,12 @@ def normalize_sale_feed(value: Any, observed_at: datetime) -> AdapterResult:
                         attributes={
                             **_source_attributes(row),
                             "timestamp_basis": "feed_observed_at",
+                            "price_unit": price_unit,
+                            "price_unit_source": price_unit_source,
                         },
                     )
                 )
-        except (KeyError, TypeError, ValueError):
+        except (KeyError, TypeError, ValueError, DecimalException):
             result.warnings.append("Skinport feed: événement incomplet ignoré.")
     return result
 

@@ -2,8 +2,39 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from app.models import AggregateMarketStat, BuyOrderObservation, CS2Item, MarketListing
-from app.pricing.valuation import MarketEvidence, calculate_liquidity, calculate_spread
+from app.pricing.comparison import float_score
+from app.pricing.valuation import (
+    MarketEvidence,
+    calculate_liquidity,
+    calculate_reference_price,
+    calculate_spread,
+)
 from app.services.analysis import MarketData, _build_evidence, _liquidity_input, _peer_floats
+
+
+def test_float_threshold_is_configurable_without_inventing_premium():
+    peers = [Decimal("0.02")] * 5
+    assert float_score(Decimal("0.02"), peers) == 50
+    assert float_score(Decimal("0.02"), peers, min_samples=6) is None
+
+
+def test_reference_provenance_only_contains_selected_evidence():
+    now = datetime.now(UTC)
+    sales = [
+        MarketEvidence(
+            "skinport",
+            "REALIZED_SALE",
+            Decimal("10"),
+            now,
+            record_id=f"sale-{index}",
+            fx_source="identity:EUR",
+        )
+        for index in range(3)
+    ]
+    unused = MarketEvidence("csfloat", "LISTING", Decimal("1"), now, record_id="ask")
+    value = calculate_reference_price([*sales, unused], now=now)
+    assert value.evidence == tuple(sales)
+    assert value.value_eur == Decimal("10")
 
 
 def test_old_liquidity_volume_is_not_refreshed_by_one_recent_listing():

@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     csfloat_sync_interval_seconds: int = Field(default=900, ge=60)
     skinport_sync_interval_seconds: int = Field(default=900, ge=300)
     dmarket_sync_interval_seconds: int = Field(default=900, ge=60)
+    skinport_realtime_enabled: bool = False
+    skinport_realtime_queue_size: int = Field(default=256, ge=1, le=5000)
+    skinport_realtime_price_unit: Literal["unverified", "minor", "major"] = "unverified"
+    skinport_realtime_price_unit_source: str = Field(default="", max_length=2048)
+    skinport_realtime_stale_seconds: int = Field(default=300, ge=60, le=3600)
+    float_min_samples: int = Field(default=5, ge=5, le=1000)
     max_listings: int = Field(default=500, ge=1, le=2000)
     history_retention_days: int = Field(default=30, ge=1, le=365)
     fx_usd_eur_rate: Decimal | None = Field(default=None, gt=0, allow_inf_nan=False)
@@ -56,11 +62,18 @@ class Settings(BaseSettings):
             raise ValueError("VERY_STALE_AFTER_SECONDS doit être supérieur à STALE_AFTER_SECONDS.")
         if self.market_sync_query and any(ord(char) < 32 for char in self.market_sync_query):
             raise ValueError("MARKET_SYNC_QUERY contient un caractère de contrôle.")
-        if self.market_sync_enabled and len(self.market_sync_query.strip()) < 3:
+        if (self.market_sync_enabled or self.skinport_realtime_enabled) and len(
+            self.market_sync_query.strip()
+        ) < 3:
             raise ValueError(
                 "MARKET_SYNC_QUERY doit contenir au moins 3 caractères "
                 "quand MARKET_SYNC_ENABLED=true."
             )
+        if (
+            self.skinport_realtime_price_unit != "unverified"
+            and not self.skinport_realtime_price_unit_source.startswith("https://")
+        ):
+            raise ValueError("Une unite de prix feed exige une source HTTPS verifiee.")
         if self.fx_usd_eur_rate is not None:
             if not self.fx_rate_source or self.fx_rate_timestamp is None:
                 raise ValueError("Un taux FX exige une source et une date explicites.")

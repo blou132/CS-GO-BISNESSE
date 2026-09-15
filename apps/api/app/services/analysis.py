@@ -39,6 +39,7 @@ from app.schemas.api import (
     Comparison,
     CurrentMarketSnapshot,
     Dashboard,
+    EvidenceSource,
     Freshness,
     IntegrationStatus,
     ItemDetail,
@@ -49,6 +50,7 @@ from app.schemas.api import (
     Platform,
     ScannerRow,
     Sticker,
+    ValuationProvenance,
 )
 
 PLATFORMS: tuple[Platform, ...] = ("csfloat", "skinport", "dmarket")
@@ -101,10 +103,11 @@ def _analyse(
     evidence: list[MarketEvidence],
     peer_floats: list[Decimal],
     mode: Mode,
+    min_float_samples: int = 5,
 ) -> Analysis:
     now = datetime.now(UTC)
     score_float = (
-        float_score(listing.item.float_value, peer_floats)
+        float_score(listing.item.float_value, peer_floats, min_samples=min_float_samples)
         if timedelta(0) <= now - _aware(listing.observed_at) <= timedelta(hours=24)
         else None
     )
@@ -231,6 +234,8 @@ def _load(
             .where(
                 PriceObservation.mode == mode,
                 PriceObservation.market_hash_name.in_(names),
+                PriceObservation.timestamp
+                >= datetime.now(UTC) - DEFAULT_PRICE_CONFIG.realized_max_age,
             )
             .order_by(PriceObservation.timestamp.desc())
         )
@@ -241,6 +246,8 @@ def _load(
             .where(
                 AggregateMarketStat.mode == mode,
                 AggregateMarketStat.market_hash_name.in_(names),
+                AggregateMarketStat.observed_at
+                >= datetime.now(UTC) - DEFAULT_PRICE_CONFIG.aggregate_max_age,
             )
             .order_by(AggregateMarketStat.observed_at.desc())
         )
@@ -248,7 +255,11 @@ def _load(
     realized_sales = list(
         session.scalars(
             select(RealizedSale)
-            .where(RealizedSale.mode == mode, RealizedSale.market_hash_name.in_(names))
+            .where(
+                RealizedSale.mode == mode,
+                RealizedSale.market_hash_name.in_(names),
+                RealizedSale.sold_at >= datetime.now(UTC) - DEFAULT_PRICE_CONFIG.realized_max_age,
+            )
             .order_by(RealizedSale.sold_at.desc())
         )
     )
@@ -258,6 +269,8 @@ def _load(
             .where(
                 BuyOrderObservation.mode == mode,
                 BuyOrderObservation.market_hash_name.in_(names),
+                BuyOrderObservation.observed_at
+                >= datetime.now(UTC) - DEFAULT_PRICE_CONFIG.current_market_max_age,
             )
             .order_by(BuyOrderObservation.observed_at.desc())
         )
@@ -270,12 +283,14 @@ def _row(
     evidence_by_name: dict[str, list[MarketEvidence]],
     floats_by_name: dict[FloatGroup, list[Decimal]],
     mode: Mode,
+    min_float_samples: int = 5,
 ) -> ScannerRow:
     analysis = _analyse(
         listing,
         evidence_by_name.get(listing.item.market_hash_name, []),
         floats_by_name.get((listing.item.market_hash_name, listing.item.exterior), []),
         mode,
+        min_float_samples,
     )
     return ScannerRow(
         id=listing.id,
@@ -426,7 +441,10 @@ def build_dashboard(session: Session, mode: Mode, settings: Settings) -> Dashboa
     )
     evidence_by_name = _build_evidence(data)
     floats = _peer_floats(data.listings)
-    rows = [_row(listing, evidence_by_name, floats, mode) for listing in selected]
+    rows = [
+        _row(listing, evidence_by_name, floats, mode, settings.float_min_samples)
+        for listing in selected
+    ]
     statuses = market_statuses(session, mode, settings)
     last_sync = max(
         (status.last_sync_at for status in statuses if status.last_sync_at is not None),
@@ -465,6 +483,7 @@ def build_item_detail(
         evidence_by_name,
         _peer_floats(data.listings),
         mode,
+        settings.float_min_samples,
     )
     observations = list(
         session.scalars(
@@ -513,6 +532,10 @@ def build_item_detail(
                 sample_size=summary.sample_size,
             )
         )
+    reference_price = calculate_reference_price(evidence_by_name.get(row.market_hash_name, []))
+    comparable_count = len(
+        _peer_floats(data.listings).get((row.market_hash_name, row.exterior), [])
+    )
     return ItemDetail(
         mode=mode,
         item=row,
@@ -523,6 +546,34 @@ def build_item_detail(
             settings,
         ),
         history=[Observation.model_validate(item) for item in observations],
+        provenance=ValuationProvenance(
+            buy=EvidenceSource(
+                platform=listing.platform,
+                kind="LISTING",
+                record_id=listing.id,
+                external_id=listing.external_id,
+                value_eur=listing.price_eur_reference,
+                price_original=listing.price_original,
+                currency=listing.currency_original,
+                observed_at=listing.observed_at,
+                fx_source=listing.fx_rate_source,
+                fx_timestamp=listing.fx_rate_timestamp,
+                timestamp_basis=cast(
+                    str | None, listing.item.source_attributes.get("timestamp_basis")
+                ),
+            ),
+            reference=[
+                EvidenceSource.model_validate(value) for value in reference_price.evidence[:50]
+            ]
+            if reference_price
+            else [],
+            reference_sample_size=reference_price.sample_size if reference_price else 0,
+            comparable_count=comparable_count,
+            float_min_samples=settings.float_min_samples,
+            float_status="AVAILABLE" if row.float_score is not None else "INSUFFICIENT_DATA",
+            fee_status="DEMO_SYNTHETIC" if mode == "demo" else "UNKNOWN",
+            eligibility="DEMO" if mode == "demo" else "REFERENCE_ONLY",
+        ),
         warnings=_analysis_warnings(
             [row],
             market_statuses(session, mode, settings),
@@ -551,18 +602,22 @@ def _analysis_warnings(
     return warnings
 
 
-def refresh_opportunities(session: Session, mode: Mode, settings: Settings) -> int:
-    data = _load(session, mode)
+def refresh_opportunities(
+    session: Session, mode: Mode, settings: Settings, *, market_hash_names: set[str] | None = None
+) -> int:
+    data = _load(session, mode, market_hash_names=market_hash_names)
     evidence_by_name = _build_evidence(data)
     floats = _peer_floats(data.listings)
 
     now = datetime.now(UTC)
-    snapshots = {
-        snapshot.listing_id: snapshot
-        for snapshot in session.scalars(
-            select(ListingAnalysisSnapshot).where(ListingAnalysisSnapshot.mode == mode)
+    snapshot_query = select(ListingAnalysisSnapshot).where(ListingAnalysisSnapshot.mode == mode)
+    if market_hash_names is not None:
+        snapshot_query = (
+            snapshot_query.join(MarketListing)
+            .join(CS2Item)
+            .where(CS2Item.market_hash_name.in_(market_hash_names))
         )
-    }
+    snapshots = {snapshot.listing_id: snapshot for snapshot in session.scalars(snapshot_query)}
     active_listing_ids: set[str] = set()
     count = 0
     for listing in data.listings:
@@ -571,6 +626,7 @@ def refresh_opportunities(session: Session, mode: Mode, settings: Settings) -> i
             evidence_by_name.get(listing.item.market_hash_name, []),
             floats.get((listing.item.market_hash_name, listing.item.exterior), []),
             mode,
+            settings.float_min_samples,
         )
         snapshot = snapshots.get(listing.id)
         if snapshot is None:
@@ -578,6 +634,11 @@ def refresh_opportunities(session: Session, mode: Mode, settings: Settings) -> i
             session.add(snapshot)
         _update_snapshot(snapshot, analysis, now)
         if analysis.opportunity_score is None:
+            continue
+        if (
+            listing.observed_at
+            and (now - _aware(listing.observed_at)).total_seconds() > settings.stale_after_seconds
+        ):
             continue
         opportunity = session.scalar(
             select(MarketOpportunity).where(
@@ -608,12 +669,15 @@ def refresh_opportunities(session: Session, mode: Mode, settings: Settings) -> i
         active_listing_ids.add(listing.id)
         count += 1
 
-    existing = session.scalars(
-        select(MarketOpportunity).where(
-            MarketOpportunity.mode == mode,
-            MarketOpportunity.status == "ACTIVE",
-        )
+    existing_query = select(MarketOpportunity).where(
+        MarketOpportunity.mode == mode,
+        MarketOpportunity.status == "ACTIVE",
     )
+    if market_hash_names is not None:
+        existing_query = existing_query.where(
+            MarketOpportunity.market_hash_name.in_(market_hash_names)
+        )
+    existing = session.scalars(existing_query)
     for opportunity in existing:
         if opportunity.listing_id not in active_listing_ids:
             opportunity.status = "INACTIVE"
@@ -753,6 +817,15 @@ def _build_evidence(data: MarketData) -> dict[str, list[MarketEvidence]]:
                     kind="LISTING",
                     value_eur=cast(Decimal, listing.price_eur_reference),
                     observed_at=listing.observed_at,
+                    record_id=listing.id,
+                    external_id=listing.external_id,
+                    price_original=listing.price_original,
+                    currency=listing.currency_original,
+                    fx_source=listing.fx_rate_source,
+                    fx_timestamp=listing.fx_rate_timestamp,
+                    timestamp_basis=cast(
+                        str | None, (listing.item.source_attributes or {}).get("timestamp_basis")
+                    ),
                 )
             )
     for sale in data.realized_sales:
@@ -766,6 +839,15 @@ def _build_evidence(data: MarketData) -> dict[str, list[MarketEvidence]]:
                     value_eur=cast(Decimal, sale.price_eur_reference),
                     observed_at=sale.sold_at,
                     volume=1,
+                    record_id=sale.id,
+                    external_id=sale.external_id,
+                    price_original=sale.price_original,
+                    currency=sale.currency_original,
+                    fx_source=sale.fx_rate_source,
+                    fx_timestamp=sale.fx_rate_timestamp,
+                    timestamp_basis=cast(
+                        str | None, (sale.attributes or {}).get("timestamp_basis")
+                    ),
                 )
             )
     for aggregate in _current_aggregates(data.aggregates):
@@ -786,6 +868,11 @@ def _build_evidence(data: MarketData) -> dict[str, list[MarketEvidence]]:
                     observed_at=aggregate.observed_at,
                     volume=aggregate.volume,
                     window=aggregate.window_code,
+                    record_id=aggregate.id,
+                    price_original=aggregate.median_price,
+                    currency=aggregate.currency,
+                    fx_source=aggregate.fx_rate_source,
+                    fx_timestamp=aggregate.fx_rate_timestamp,
                 )
             )
     for order in _current_orders(data.buy_orders, now):
@@ -797,6 +884,11 @@ def _build_evidence(data: MarketData) -> dict[str, list[MarketEvidence]]:
                     value_eur=order.price_eur_reference,
                     observed_at=order.observed_at,
                     volume=order.quantity,
+                    record_id=order.id,
+                    price_original=order.price_original,
+                    currency=order.currency_original,
+                    fx_source=order.fx_rate_source,
+                    fx_timestamp=order.fx_rate_timestamp,
                 )
             )
     # Legacy/demo SALE observations predate the dedicated realized_sales table.
@@ -818,6 +910,11 @@ def _build_evidence(data: MarketData) -> dict[str, list[MarketEvidence]]:
                     value_eur=cast(Decimal, observation.price_eur_reference),
                     observed_at=observation.timestamp,
                     volume=observation.volume,
+                    record_id=observation.id,
+                    price_original=observation.price,
+                    currency=observation.currency,
+                    fx_source=observation.fx_rate_source,
+                    fx_timestamp=observation.fx_rate_timestamp,
                 )
             )
     return result

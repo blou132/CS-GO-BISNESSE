@@ -6,9 +6,11 @@ from typing import Any, cast
 from sqlalchemy import ColumnElement, Select, and_, asc, desc, func, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.config import Settings
 from app.models import CS2Item, ListingAnalysisSnapshot, MarketListing
 from app.schemas.api import Mode, Platform, ScannerFacets, ScannerPage, ScannerSort
 from app.services.analysis import row_from_snapshot, row_without_snapshot
+from app.services.freshness import fresh_listing
 
 
 @dataclass(frozen=True)
@@ -39,8 +41,10 @@ class ScannerQuery:
     doppler_phase: str | None = None
 
 
-def build_scanner_page(session: Session, query: ScannerQuery) -> ScannerPage:
-    statement = _filtered_statement(query)
+def build_scanner_page(
+    session: Session, query: ScannerQuery, settings: Settings | None = None
+) -> ScannerPage:
+    statement = _filtered_statement(query, settings)
     total = int(
         session.scalar(
             select(func.count()).select_from(
@@ -75,6 +79,7 @@ def build_scanner_page(session: Session, query: ScannerQuery) -> ScannerPage:
 
 def _filtered_statement(
     query: ScannerQuery,
+    settings: Settings | None = None,
 ) -> Select[tuple[MarketListing, ListingAnalysisSnapshot | None]]:
     statement = (
         select(MarketListing, ListingAnalysisSnapshot)
@@ -91,6 +96,8 @@ def _filtered_statement(
     )
     if query.market:
         statement = statement.where(MarketListing.platform == query.market)
+    if query.mode == "live":
+        statement = statement.where(fresh_listing(settings or Settings(_env_file=None)))
     if query.market_hash_name:
         statement = statement.where(CS2Item.market_hash_name == query.market_hash_name)
     if query.paint_seeds:
