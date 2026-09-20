@@ -65,6 +65,11 @@ parcours ; ils n'ont aucune valeur de marché.
 
 ## Configuration
 
+Pour saisir les cles marketplace sans les publier ni modifier la production :
+[workflow interactif V0.12](docs/SECURITY.md). Les validations authentifiees restent
+distinctes des tests sur fixtures ; voir le
+[rapport de cloture du 20 septembre](docs/LIVE_CREDENTIALS_REPORT_2026-09-20.md).
+
 Toutes les variables sont décrites dans [.env.example](.env.example).
 
 | Variable | Requise | Usage |

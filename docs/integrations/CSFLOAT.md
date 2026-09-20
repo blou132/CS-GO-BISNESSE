@@ -1,5 +1,19 @@
 # CSFloat
 
+## V0.12 : 15-16 septembre 2026
+
+Documentation officielle relue le 15 septembre : Authorization par cle,
+`GET /api/v1/listings`, curseur opaque en entree, limite 50. Le quota global
+chiffre et le prochain curseur dans une reponse reelle restent non verifies.
+La section Errors contient encore du texte generique du generateur de docs ;
+elle ne constitue pas une explication specifique d'un 403 CSFloat.
+
+Le smoke demande maintenant **5** annonces et une seule tentative ; sortie
+HTTP expurgee, compteurs des champs normalises, duree, parser et pagination
+UNKNOWN tant qu'elle n'est pas prouvee. Voir [saisie et commande](../SECURITY.md).
+401/403/404/429/5xx, timeout, JSON invalide et schema sont testes hors ligne.
+Etat reel : **NOT_CONFIGURED**, aucune requete authentifiee envoyee.
+
 - Statut : `OFFICIAL_API`
 - Documentation officielle : <https://docs.csfloat.com/>
 - Vérification documentaire : 13 septembre 2026

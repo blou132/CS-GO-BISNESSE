@@ -1,5 +1,24 @@
 # DMarket
 
+## V0.12 : 15-16 septembre 2026
+
+Contrat officiel relu le 15 septembre : signature Ed25519, timestamp de moins
+de deux minutes, chemin decode et query string transmise sans modification.
+Le signataire local refuse maintenant toute methode autre que GET et tout corps.
+Tests du vecteur public RFC 8032, alterations chemin/corps/timestamp/signature,
+paire incoherente et absence de cle. Le rejet d'un timestamp expire par le
+vrai serveur reste non teste ; la preuve locale porte sur la signature alteree.
+
+La [FAQ officielle](https://dmarket.com/faq#startUsingTradingAPI) annonce des
+quotas par compte authentifie : market items 10 RPS, last sales 6 RPS, fee
+110 RPS, autres methodes cumulees 20 RPS. Sans auth : respectivement market
+items 2 RPS, fee 2 RPS, autres 6 RPS. Ce sont des limites documentaires,
+pas un quota observe avec notre compte. Notre pacing conservateur est conserve.
+
+[Smoke V0.12](../SECURITY.md) : cinq offres, une tentative ; enrichissements
+targets/ventes/frais seulement avec `--enrich`. Etat : **NOT_CONFIGURED**,
+ni authentification reelle ni frais de compte valides. Aucun endpoint transactionnel.
+
 - Statut : `OFFICIAL_API`
 - Documentation officielle : <https://docs.dmarket.com/v1/swagger.html>
 - Vérification documentaire : 13 septembre 2026

@@ -1,6 +1,10 @@
 # Validation — 7 septembre 2026
 
-Dernier rapport : [V0.11, live et realtime du 15 septembre](LIVE_MARKETS_REPORT_2026-09-15.md).
+Dernier rapport : [V0.12, credentials et securite, cloture le 20 septembre](LIVE_CREDENTIALS_REPORT_2026-09-20.md).
+Validation V0.12 : 163 tests backend, 45 frontend ; lint/types/build, Alembic et
+navigateur desktop/mobile passes. Production non deployee. Cles LIVE et SSH
+restent soumis aux actions humaines detaillees dans ce rapport.
+Rapport V0.11 : [live et realtime du 15 septembre](LIVE_MARKETS_REPORT_2026-09-15.md).
 Rapport precedent : [sources, SkinSniper et valorisation du 14 septembre](SOURCES_VALUATION_REPORT_2026-09-14.md).
 Le présent document conserve les preuves historiques de la première mise en service.
 

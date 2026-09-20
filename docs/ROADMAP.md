@@ -11,6 +11,14 @@ live CSFloat/DMarket restent bloquees par les cles absentes ; le flux Skinport
 par HTTP 403 et le contrat d'unite a confirmer. Aucun deploiement automatique.
 Voir [le rapport live](LIVE_MARKETS_REPORT_2026-09-15.md).
 
+Mission de consolidation **V0.12, Live Credentials**, 15-16 septembre : saisie
+securisee, smokes minimaux et diagnostics expurges, erreurs/signatures, statut
+Skinport bloque et GitHub SSH prepares et testes. Acces CSFloat/DMarket non
+configures, autorisation Skinport non resolue, ajout de cle SSH et revocation
+du PAT requis. Voir [le rapport de cloture du 20 septembre](LIVE_CREDENTIALS_REPORT_2026-09-20.md).
+Cette numerotation de mission ne renumerote pas les lots produit historiques
+ci-dessous. Aucune V0.13 ni activation production commencee.
+
 | Version | Périmètre | Condition de validation |
 | --- | --- | --- |
 | V0.1 | FastAPI, Next.js, PostgreSQL, Compose, configuration, healthchecks, migrations, tests et lint | Lancement local et contrôles reproductibles |

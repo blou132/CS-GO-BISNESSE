@@ -1,5 +1,26 @@
 # Skinport
 
+## V0.12 : acces refuse, cause non determinee
+
+Relecture du [feed officiel](https://docs.skinport.com/websocket/sale-feed),
+15 septembre : Socket.IO MessagePack, websocket, `saleFeedJoin` EUR/en/730.
+Aucune exigence de cle, Origin, user-agent specifique ou restriction geographique
+n'est indiquee sur cette page. L'auth Basic des API de compte ne prouve pas une
+exigence d'auth du flux ; aucune cle Skinport n'est ajoutee.
+
+Probe unique du 15 septembre 16:47:51 UTC : HTTP **403**, `text/html`, serveur
+Cloudflare, pas de `cf-mitigated: challenge`, pas de Retry-After, zero evenement.
+**BLOCKED_BY_PROVIDER / cause NOT_DETERMINED**. Cela ne permet de conclure ni
+a une restriction geo, ni a un manque de cle, ni a un fingerprint impose.
+Skinport doit confirmer l'autorisation et la cause. Aucun contournement ni
+nouvel essai avec headers/cookies falsifies. Flux toujours desactive.
+
+REST revu le 16 septembre : HTTP 200 items et history. Source globalement
+DEGRADED quand le blocage du flux est connu, REST independamment ONLINE,
+application non unhealthy. Le statut historique optionnel est decrit dans
+[SECURITY.md](../SECURITY.md). Les metriques de debit realtime LIVE ne sont
+pas mesurees faute de connexion autorisee.
+
 - Statut : `PARTIAL`
 - Documentation officielle : <https://docs.skinport.com/items>
 - Historique officiel étudié : <https://docs.skinport.com/sales/history>
