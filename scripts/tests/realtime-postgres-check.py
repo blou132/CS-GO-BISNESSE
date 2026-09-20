@@ -14,8 +14,8 @@ from app.services.analysis import build_item_detail
 from app.services.realtime_storage import FeedEvent, persist_feed_batch
 from app.services.scanner import ScannerQuery, build_scanner_page
 
-assert os.environ.get("CS2_ISOLATED_VALIDATION") == "cs2-v011-validation"
-settings = Settings(_env_file=None, skinport_realtime_price_unit="minor",
+assert os.environ.get("CS2_ISOLATED_VALIDATION") in {"cs2-v011-validation", "cs2-v012-validation"}
+settings = Settings(_env_file=None, environment="test", skinport_realtime_price_unit="minor",
                     skinport_realtime_price_unit_source="https://example.test/synthetic-contract")
 engine = build_engine(settings.database_url)
 assert engine.dialect.name == "postgresql"
@@ -27,8 +27,13 @@ def event(kind, identifier, price=2450):
     now = datetime.now(UTC)
     value = {"eventType": kind, "sales": [{"saleId": identifier, "marketHashName": name,
               "salePrice": price, "appid": 730, "currency": "EUR", "wear": 0.2}]}
-    return FeedEvent(normalize_sale_feed(value, now, price_unit="minor",
-                     price_unit_source=settings.skinport_realtime_price_unit_source), now)
+    result = normalize_sale_feed(value, now, price_unit="minor",
+                                price_unit_source=settings.skinport_realtime_price_unit_source)
+    for row in result.listings:
+        row.item.source_attributes["validation_class"] = "TEST"
+    for row in result.realized_sales:
+        row.attributes["validation_class"] = "TEST"
+    return FeedEvent(result, now)
 
 
 try:
@@ -63,5 +68,15 @@ try:
         print({"postgres_receipts": "PASS", "changed_price": "PASS", "sold_replay": "PASS",
                "stale_scanner": "PASS", "provenance": "PASS", "fixture_only": True,
                "database_bytes": size})
+        from app.models import Base
+        print({"validation_class": "TEST", "row_counts": {
+            table.name: session.scalar(select(func.count()).select_from(table))
+            for table in Base.metadata.sorted_tables
+        }})
+        print({"table_sizes": [dict(row) for row in session.execute(text(
+            "SELECT relname, pg_total_relation_size(relid) AS bytes, "
+            "pg_indexes_size(relid) AS index_bytes FROM pg_catalog.pg_statio_user_tables "
+            "WHERE schemaname='public' ORDER BY relname"
+        )).mappings()]})
 finally:
     engine.dispose()

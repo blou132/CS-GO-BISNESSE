@@ -23,7 +23,10 @@ async def main(query):
         async with asyncio.timeout(120):
             result = await adapter.search_items(query)
         evidence = [MarketEvidence("skinport", "HISTORICAL_MEDIAN", row.median_price,
-                                  row.observed_at, volume=row.volume, window=row.window)
+                                  row.observed_at, volume=row.volume, window=row.window,
+                                  price_original=row.median_price, currency=row.currency,
+                                  fx_source="identity:EUR", fx_timestamp=row.observed_at,
+                                  timestamp_basis="history_collected_at")
                     for row in result.aggregates
                     if row.market_hash_name == query and row.currency == "EUR"
                     and row.median_price and row.volume != 0]
@@ -36,6 +39,7 @@ async def main(query):
             "reference": asdict(reference) if reference else None,
             "liquidity": asdict(liquidity) if liquidity else None,
             "profit": None, "fees": "UNKNOWN", "executable_opportunity": False,
+            "http_requests": list(adapter._http.diagnostics),
         }
     except (MarketAdapterError, TimeoutError) as error:
         report["skinport_rest"] = {"status": "error", "code": getattr(error, "code", "timeout")}
@@ -46,6 +50,7 @@ async def main(query):
             fx = ExchangeRate(currency=rate.currency, eur_per_unit=Decimal(1) / rate.currency_per_eur,
                               timestamp=rate.observed_at, source="ECB Data Portal EXR daily reference rates")
             conversions.append({"currency": rate.currency, "date": rate.observed_at,
+                                "original_amount": "100", "source": fx.source,
                                 "reference_eur_for_100": fx.convert(Decimal(100), now=datetime.now(UTC), max_age_hours=120),
                                 "effective_fx": None})
         report["fx"] = conversions

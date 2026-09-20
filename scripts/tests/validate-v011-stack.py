@@ -13,10 +13,12 @@ from datetime import UTC, datetime
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true", help="Build, test and remove the isolated stack")
-    if not parser.parse_args().run:
+    parser.add_argument("--version", choices=("v011", "v012"), default="v011")
+    args = parser.parse_args()
+    if not args.run:
         parser.error("--run is required; Docker and cached Playwright tools must be available")
     root = Path(__file__).resolve().parents[2]
-    project = "cs2-v011-validation"
+    project = f"cs2-{args.version}-validation"
     existing = subprocess.check_output([
         "docker", "ps", "-aq", "--filter", f"label=com.docker.compose.project={project}"
     ], text=True).strip()
@@ -25,7 +27,7 @@ def main():
     for port in (3000, 8000):
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", port))
-    evidence = root / "artifacts" / f"v011-{datetime.now(UTC):%Y%m%d-%H%M%S}"
+    evidence = root / "artifacts" / f"{args.version}-{datetime.now(UTC):%Y%m%d-%H%M%S}"
     evidence.mkdir(parents=True)
     env = os.environ.copy()
     env.update({
@@ -35,6 +37,7 @@ def main():
         "SESSION_COOKIE_SECURE": "false", "CSFLOAT_API_KEY": "",
         "DMARKET_PUBLIC_KEY": "", "DMARKET_SECRET_KEY": "",
         "SKINPORT_REALTIME_ENABLED": "false", "SKINPORT_REALTIME_PRICE_UNIT": "unverified",
+        "SKINPORT_REALTIME_BLOCKED_AT": "",
         "SKINPORT_REALTIME_PRICE_UNIT_SOURCE": "", "MARKET_SYNC_QUERY": "",
         "FX_REFERENCE_SYNC_ENABLED": "false", "MARKET_SYNC_ENABLED": "false",
         "FX_USD_EUR_RATE": "", "FX_RATE_SOURCE": "", "FX_RATE_TIMESTAMP": "",

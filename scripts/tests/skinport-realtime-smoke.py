@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 from datetime import UTC, datetime
+from importlib.metadata import version
 
 from app.services.realtime import SkinportTransport
 
@@ -16,7 +17,8 @@ async def check(seconds):
     kinds = set()
 
     async def receive(payload):
-        if isinstance(payload, dict) and payload.get("eventType") in {"listed", "sold"}:
+        if (isinstance(payload, dict) and isinstance(payload.get("eventType"), str)
+            and payload.get("eventType") in {"listed", "sold"}):
             kinds.add(payload["eventType"])
             if isinstance(payload.get("sales"), list):
                 report["events"] += len(payload["sales"])
@@ -34,6 +36,12 @@ async def check(seconds):
         await transport.close()
     report["http_status"] = transport.http_status
     report["types"] = sorted(kinds)
+    report["http_metadata"] = transport.diagnostics
+    report["client_versions"] = {name: version(name) for name in ("python-socketio", "python-engineio", "aiohttp", "msgpack")}
+    report["access_status"] = "BLOCKED_BY_PROVIDER" if transport.http_status in {401, 403} else "UNKNOWN"
+    report["cause"] = ("CLOUDFLARE_CHALLENGE" if transport.diagnostics.get("cloudflare_challenge")
+                       else "NOT_DETERMINED")
+    report["secret_exposed"] = "NO"
     print(json.dumps(report))
     return 0 if report["connected"] and report["events"] else 2
 

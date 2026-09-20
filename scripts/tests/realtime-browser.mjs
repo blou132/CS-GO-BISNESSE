@@ -40,12 +40,12 @@ try {
   await page.route("**/api/market-monitor", async route => {
     const response = await route.fetch();
     const data = await response.json();
-    data.realtime.skinport = { ...data.realtime.skinport, enabled: true, status: "disconnected", http_status: 403, last_error: "connection_failed", reconnect_count: 1, dropped_events: 2 };
+    data.realtime.skinport = { ...data.realtime.skinport, enabled: false, status: "blocked", http_status: 403, last_error: "blocked_by_provider", reconnect_count: 1, dropped_events: 2 };
     polls += 1;
     await route.fulfill({ response, json: data });
   });
-  await stream.getByText("Déconnecté", { exact: true }).waitFor({ timeout: 12000 });
-  await stream.getByText("connection_failed (HTTP 403)", { exact: true }).waitFor();
+  await stream.getByText("Bloqué, collecte désactivée", { exact: true }).waitFor({ timeout: 12000 });
+  await stream.getByText("blocked_by_provider (HTTP 403)", { exact: true }).waitFor();
   assert(polls >= 1, "Monitor must refresh without a reload");
   await capture("realtime-refused-fixture", stream);
   await page.unroute("**/api/market-monitor");
