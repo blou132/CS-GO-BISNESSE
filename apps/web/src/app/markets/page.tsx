@@ -5,7 +5,7 @@ import { readJson } from "@/components/market-provider";
 import { RealtimeSummary } from "@/components/realtime-status";
 import { DataPrinciple, LoadingState, PageHeading, StatusBadge } from "@/components/shared";
 import { dateTime, marketNames } from "@/lib/format";
-import { marketOperationalLabel, monitorSummary } from "@/lib/monitor";
+import { marketOperationalLabel, monitorSummary, sourceOperationalLabel } from "@/lib/monitor";
 import type { MarketMonitorData, SystemHealth } from "@/lib/types";
 
 export default function MarketsPage() {
@@ -55,6 +55,7 @@ export default function MarketsPage() {
     </section>
     {loading && !monitor ? <LoadingState /> : <section className="market-cards">{monitor?.platforms.map((market) => <article className="market-card" key={market.platform}>
       <header><span className={`market-letter ${market.platform}`}>{market.platform[0].toUpperCase()}</span><div><h2>{marketNames[market.platform]}</h2><span>REST · {market.integration_status.replaceAll("_", " ")}</span></div><StatusBadge status={market.status} /></header>
+      {market.platform === "skinport" && monitor?.realtime?.skinport?.status === "blocked" ? <p role="status">{sourceOperationalLabel(market, monitor.realtime.skinport)}</p> : null}
       <p>{market.message}</p><dl><div><dt>État des données</dt><dd>{marketOperationalLabel(market)}</dd></div><div><dt>Dernière tentative</dt><dd>{dateTime(market.last_attempt_at)}</dd></div><div><dt>Dernier succès</dt><dd>{dateTime(market.last_success_at)}</dd></div><div><dt>Prochaine exécution</dt><dd>{dateTime(market.next_run_at)}</dd></div><div><dt>Durée</dt><dd>{market.last_duration_ms === null ? "Jamais" : `${market.last_duration_ms} ms`}</dd></div><div><dt>Reçus / créés / mis à jour</dt><dd>{market.last_items_received} / {market.last_items_created} / {market.last_items_updated}</dd></div><div><dt>Échecs consécutifs</dt><dd>{market.consecutive_failures}</dd></div><div><dt>Dernière erreur</dt><dd>{market.last_error ? `${dateTime(market.last_error_at)} — ${market.last_error}` : "Aucune enregistrée"}</dd></div><div><dt>Type de données</dt><dd>{market.platform === "skinport" ? "Agrégats de prix" : "Listings individuels"}</dd></div></dl>
     </article>)}</section>}
     <div className="market-limit"><strong>Lecture et analyse uniquement</strong><p>Transactions automatiques désactivées. Skinport REST : agrégats de marché. Flux temps réel : état indépendant ci-dessus.</p></div>

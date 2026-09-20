@@ -21,11 +21,40 @@ from app.models import (
     CanonicalItem,
     CS2Item,
     MarketListing,
+    MarketOpportunity,
     PlatformFeeSchedule,
     PriceObservation,
     RealizedSale,
 )
+from app.services.analysis import build_item_detail, refresh_opportunities
 from app.services.storage import aware, persist_result
+
+
+def test_cheap_listing_and_absurd_ask_do_not_create_executable_profit(tmp_path):
+    settings = Settings(
+        _env_file=None, database_url=f"sqlite:///{tmp_path / 'test-spread.db'}", environment="test"
+    )
+    engine = build_engine(settings.database_url)
+    Base.metadata.create_all(engine)
+    factory = build_session_factory(engine)
+    try:
+        with factory() as session:
+            for platform, price in (("csfloat", "1"), ("dmarket", "99999")):
+                row = _listing("TEST-" + platform, price, datetime.now(UTC))
+                row.item.source_attributes["validation_class"] = "TEST"
+                persist_result(session, AdapterResult(listings=[row]), platform, "live", settings)
+            session.flush()
+            assert refresh_opportunities(session, "live", settings) == 0
+            assert list(session.scalars(select(MarketOpportunity))) == []
+            listing = session.scalar(
+                select(MarketListing).where(MarketListing.platform == "csfloat")
+            )
+            detail = build_item_detail(session, listing.id, "live", settings)
+            assert detail.item.potential_profit_eur is None
+            assert detail.provenance.fee_status == "UNKNOWN"
+            assert detail.provenance.eligibility == "REFERENCE_ONLY"
+    finally:
+        engine.dispose()
 
 
 def _listing(external_id: str, price: str, observed_at: datetime) -> AdapterListing:

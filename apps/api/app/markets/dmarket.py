@@ -53,6 +53,8 @@ class DMarketAdapter(MarketAdapter):
         await self._http.aclose()
 
     def _sign(self, request: httpx.Request) -> None:
+        if request.method != "GET" or request.content:
+            raise ValueError("Only bodyless read-only GET requests may be signed")
         if not self._public_key or not self._secret_key:
             raise ConfigurationError("Clés DMARKET_PUBLIC_KEY et DMARKET_SECRET_KEY requises.")
         try:
@@ -82,11 +84,15 @@ class DMarketAdapter(MarketAdapter):
             }
         )
 
-    async def search_items(self, query: str) -> AdapterResult:
+    async def search_items(
+        self, query: str, *, limit: int = 50, enrich: bool = True
+    ) -> AdapterResult:
+        if isinstance(limit, bool) or not 1 <= limit <= 50:
+            raise ValueError("DMarket limit must be between 1 and 50")
         query = check_query(query)
         params: dict[str, str | int] = {
             "gameId": "a8db",
-            "limit": 50,
+            "limit": limit,
             "orderBy": "price",
             "orderDir": "asc",
         }
@@ -110,7 +116,7 @@ class DMarketAdapter(MarketAdapter):
                 result.warnings.append("DMarket: offre invalide ou verrouillée ignorée.")
         if rows and not result.listings:
             raise MarketAdapterError("invalid_response", "No valid DMarket offers")
-        if query and any(row.item.market_hash_name == query for row in result.listings):
+        if enrich and query and any(row.item.market_hash_name == query for row in result.listings):
             result.buy_orders.extend(
                 await optional_enrichment(result, "buy_orders", self.get_buy_orders(query))
             )

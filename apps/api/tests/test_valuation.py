@@ -84,6 +84,14 @@ def test_reference_price_falls_back_to_best_ask_per_platform() -> None:
     assert result.confidence < 60
 
 
+def test_single_source_low_volume_never_has_high_confidence():
+    reference = calculate_reference_price(
+        [evidence("skinport", "HISTORICAL_MEDIAN", "26.10", volume=1, window="7D")],
+        now=NOW,
+    )
+    assert reference is not None and reference.confidence < 60
+
+
 def test_spread_uses_lowest_ask_and_highest_bid() -> None:
     result = calculate_spread(
         [

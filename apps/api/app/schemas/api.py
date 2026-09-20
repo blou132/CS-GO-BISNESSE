@@ -172,7 +172,14 @@ class MarketMetrics(BaseModel):
 class RealtimeStatus(BaseModel):
     enabled: bool = False
     status: Literal[
-        "disabled", "connecting", "connected", "online", "degraded", "disconnected", "stopped"
+        "disabled",
+        "connecting",
+        "connected",
+        "online",
+        "degraded",
+        "disconnected",
+        "stopped",
+        "blocked",
     ] = "disabled"
     connected: bool = False
     connected_since: datetime | None = None

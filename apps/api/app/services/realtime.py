@@ -14,6 +14,7 @@ import socketio  # type: ignore[import-untyped]
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import Settings
+from app.markets.diagnostics import response_metadata
 from app.markets.http import retry_after_seconds
 from app.markets.skinport import normalize_sale_feed
 from app.schemas.api import RealtimeStatus
@@ -35,6 +36,7 @@ class SkinportTransport:
     def __init__(self) -> None:
         self.http_status: int | None = None
         self.retry_after: float | None = None
+        self.diagnostics: dict[str, object] = {}
         self._http: aiohttp.ClientSession | None = None
         self._client: Any = None
 
@@ -44,6 +46,12 @@ class SkinportTransport:
         async def response(session: Any, context: Any, params: Any) -> None:
             self.http_status = params.response.status
             self.retry_after = retry_after_seconds(params.response.headers.get("Retry-After"))
+            self.diagnostics = {
+                "checked_at": datetime.now(UTC).isoformat(),
+                "host": "skinport.com",
+                "path": "/socket.io/",
+                **response_metadata(params.response.headers),
+            }
 
         trace.on_request_end.append(response)
         self._http = aiohttp.ClientSession(trace_configs=[trace])
@@ -92,6 +100,10 @@ class SkinportRealtime:
         self._transport_factory = transport_factory
         self.queue: asyncio.Queue[FeedEvent] = asyncio.Queue(settings.skinport_realtime_queue_size)
         self.state = RealtimeStatus(enabled=settings.skinport_realtime_enabled)
+        if settings.skinport_realtime_blocked_at:
+            self.state.http_status = 403
+            self.state.last_attempt_at = settings.skinport_realtime_blocked_at
+            self.state.last_error = "blocked_by_provider"
         self._stop = asyncio.Event()
         self._receiver: asyncio.Task[None] | None = None
         self._consumer: asyncio.Task[None] | None = None
@@ -99,6 +111,8 @@ class SkinportRealtime:
 
     def snapshot(self) -> RealtimeStatus:
         value = self.state.model_copy(deep=True)
+        if not value.connected and value.http_status in {401, 403}:
+            value.status = "blocked"
         value.queue_depth = self.queue.qsize()
         value.events_per_minute = sum(
             stamp >= time.monotonic() - 60 for stamp in list(self._events)
@@ -223,7 +237,11 @@ class SkinportRealtime:
             if self.state.http_status in {401, 403, 429}:
                 delay = 300  # No bypass or fast retry after an upstream refusal.
             delay = max(delay, getattr(transport, "retry_after", None) or 0)
-            self.state.status = "disconnected"
+            self.state.status = (
+                "blocked" if self.state.http_status in {401, 403} else "disconnected"
+            )
+            if self.state.status == "blocked":
+                self.state.last_error = "blocked_by_provider"
             self.state.reconnect_count += 1
             self.state.next_retry_at = datetime.now(UTC) + timedelta(seconds=delay)
             logger.warning(

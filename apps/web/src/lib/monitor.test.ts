@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasBlockingMarketFailure, marketOperationalLabel, monitorSummary, realtimeLabel } from "./monitor";
+import { hasBlockingMarketFailure, marketOperationalLabel, monitorSummary, realtimeLabel, sourceOperationalLabel } from "./monitor";
 import type { RealtimeStatus } from "./realtime-types";
 import type { MarketMonitorData, MarketStatus } from "./types";
 
@@ -46,6 +46,13 @@ const monitor: MarketMonitorData = {
 };
 
 describe("market monitor helpers", () => {
+  it("distinguishes disabled collection from provider refusal without breaking REST readiness", () => {
+    const stream = { enabled: false, status: "blocked", http_status: 403 } as RealtimeStatus;
+    expect(realtimeLabel(stream)).toBe("Bloqué, collecte désactivée");
+    expect(realtimeLabel({ ...stream, enabled: true })).toBe("Bloqué par le fournisseur");
+    expect(sourceOperationalLabel(market, stream)).toBe("Source dégradée : REST en ligne, temps réel bloqué");
+    expect(hasBlockingMarketFailure({ ...monitor, realtime: { skinport: stream } })).toBe(false);
+  });
   it("keeps REST healthy when the optional stream is disconnected", () => {
     const stream = { enabled: true, status: "disconnected", last_success_at: null } as RealtimeStatus;
     expect(realtimeLabel(stream)).toBe("Déconnecté");

@@ -320,7 +320,9 @@ def market_monitor(request: Request, session: DbSession, settings: SettingsDep) 
     result = build_market_monitor(session, settings, scheduler_running=scheduler_running)
     stream = request.app.state.skinport_realtime.snapshot()
     result.realtime["skinport"] = stream
-    if stream.enabled and stream.status in {"degraded", "disconnected"}:
+    if stream.status == "blocked" or (
+        stream.enabled and stream.status in {"degraded", "disconnected"}
+    ):
         result.warnings.append(
             "Skinport temps reel indisponible ou incomplet ; etat REST independant."
         )

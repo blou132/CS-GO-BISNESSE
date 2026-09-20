@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import time
+from collections import deque
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -51,6 +52,7 @@ class ReadOnlyHTTP:
         self._lock = asyncio.Lock()
         self._next_request_at = 0.0
         self._cooldown_until = 0.0
+        self.diagnostics: deque[dict[str, object]] = deque(maxlen=16)
 
     async def aclose(self) -> None:
         if self.owns_client:
@@ -111,6 +113,23 @@ class ReadOnlyHTTP:
                 raise MarketAdapterError("unavailable", "Marketplace network unavailable") from None
 
             status = response.status_code
+            # Local import avoids coupling retry parsing to the metadata filter.
+            from .diagnostics import response_metadata
+
+            self.diagnostics.append(
+                {
+                    "host": request.url.host,
+                    "path": request.url.path.split("/targets-by-title/")[0]
+                    + (
+                        "/targets-by-title/{game}/{title}"
+                        if "/targets-by-title/" in request.url.path
+                        else ""
+                    ),
+                    "http_status": status,
+                    "duration_ms": round((time.monotonic() - started) * 1000, 2),
+                    **response_metadata(response.headers),
+                }
+            )
             self._log(request, status, started, None if status == 200 else "upstream_http")
             if status in (401, 403):
                 raise MarketAdapterError("authentication", "Marketplace access denied")

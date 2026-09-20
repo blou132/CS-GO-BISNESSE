@@ -36,11 +36,11 @@ async def test_smoke_redacts_configuration_error_and_closes_clients(monkeypatch)
     monkeypatch.setattr(smoke, "build_adapters", lambda settings: {"csfloat": adapter})
     monkeypatch.setattr(smoke, "close_adapters", close)
     result = await smoke.check_source(Settings(_env_file=None), "csfloat", "TEST Skin")
-    assert result == {
-        "platform": "csfloat",
-        "status": "not_configured",
-        "error_code": "configuration",
-    }
+    assert result["status"] == "not_configured"
+    assert result["error_code"] == "configuration"
+    assert result["request"] == "NOT_SENT"
+    assert result["secret_exposed"] == "NO"
+    assert "TEST PRIVATE TEXT" not in str(result)
     close.assert_awaited_once()
 
 
@@ -50,3 +50,15 @@ def test_smoke_requires_explicit_live_option_before_building_clients(monkeypatch
     with pytest.raises(SystemExit) as error:
         smoke.main()
     assert error.value.code == 2
+
+
+@pytest.mark.asyncio
+async def test_smoke_redacts_cleanup_errors(monkeypatch):
+    adapter = SimpleNamespace(search_items=AsyncMock(return_value=AdapterResult()))
+    monkeypatch.setattr(smoke, "build_adapters", lambda settings: {"skinport": adapter})
+    monkeypatch.setattr(
+        smoke, "close_adapters", AsyncMock(side_effect=RuntimeError("TEST_PRIVATE"))
+    )
+    result = await smoke.check_source(Settings(_env_file=None), "skinport", "TEST Skin")
+    assert result["error_code"] == "client_close_failed"
+    assert "TEST_PRIVATE" not in str(result)

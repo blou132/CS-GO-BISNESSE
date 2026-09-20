@@ -263,7 +263,7 @@ async def test_upstream_refusal_cools_down_and_close_errors_do_not_kill_loop(dat
         while stream.snapshot().reconnect_count == 0:
             await asyncio.sleep(0.01)
     state = stream.snapshot()
-    assert state.status == "disconnected" and not state.connected
+    assert state.status == "blocked" and not state.connected
     assert (state.next_retry_at - datetime.now(UTC)).total_seconds() > 295
     assert "private" not in state.model_dump_json()
     await stream.stop()

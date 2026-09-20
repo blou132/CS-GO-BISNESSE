@@ -24,6 +24,11 @@ packages = ["app"]
 testpaths = ["tests"]
 pythonpath = ["."]
 asyncio_mode = "auto"
+markers = [
+  "unit: offline unit and fixture contract tests",
+  "integration: isolated local HTTP or database integration tests",
+  "live: external provider tests; explicit opt-in required",
+]
 
 [tool.ruff]
 target-version = "py312"

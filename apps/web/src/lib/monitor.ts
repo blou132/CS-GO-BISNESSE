@@ -2,13 +2,22 @@ import type { MarketMonitorData, MarketStatus } from "./types";
 import type { RealtimeStatus } from "./realtime-types";
 
 export function realtimeLabel(state: RealtimeStatus): string {
+  if (state.status === "blocked") return state.enabled ? "Bloqué par le fournisseur" : "Bloqué, collecte désactivée";
   if (!state.enabled) return "Désactivé";
   if (state.status === "online" && !state.last_success_at) return "En attente de données";
   const labels: Record<RealtimeStatus["status"], string> = {
     disabled: "Désactivé", connecting: "Connexion", connected: "Connecté, ingestion en attente",
     online: "En ligne", degraded: "Dégradé", disconnected: "Déconnecté", stopped: "Arrêté",
+    blocked: "Bloqué par le fournisseur",
   };
   return labels[state.status];
+}
+
+export function sourceOperationalLabel(market: MarketStatus, stream?: RealtimeStatus): string {
+  if (market.platform === "skinport" && market.status === "online" && stream?.status === "blocked") {
+    return "Source dégradée : REST en ligne, temps réel bloqué";
+  }
+  return marketOperationalLabel(market);
 }
 
 export function monitorSummary(monitor: MarketMonitorData | null) {

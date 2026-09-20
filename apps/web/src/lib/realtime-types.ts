@@ -1,6 +1,6 @@
 export interface RealtimeStatus {
   enabled: boolean;
-  status: "disabled" | "connecting" | "connected" | "online" | "degraded" | "disconnected" | "stopped";
+  status: "disabled" | "connecting" | "connected" | "online" | "degraded" | "disconnected" | "stopped" | "blocked";
   connected: boolean;
   connected_since: string | null;
   last_event_at: string | null;

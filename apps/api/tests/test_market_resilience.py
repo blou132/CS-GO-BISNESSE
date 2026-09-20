@@ -18,6 +18,7 @@ from app.markets.http import ReadOnlyHTTP
     [
         (401, "authentication"),
         (403, "authentication"),
+        (404, "not_found"),
         (429, "rate_limited"),
         (500, "unavailable"),
         (502, "unavailable"),

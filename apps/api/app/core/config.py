@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from functools import lru_cache
 from typing import Literal, Self
@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     skinport_sync_interval_seconds: int = Field(default=900, ge=300)
     dmarket_sync_interval_seconds: int = Field(default=900, ge=60)
     skinport_realtime_enabled: bool = False
+    skinport_realtime_blocked_at: datetime | None = None
     skinport_realtime_queue_size: int = Field(default=256, ge=1, le=5000)
     skinport_realtime_price_unit: Literal["unverified", "minor", "major"] = "unverified"
     skinport_realtime_price_unit_source: str = Field(default="", max_length=2048)
@@ -46,6 +47,14 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_runtime(self) -> Self:
+        if self.skinport_realtime_blocked_at:
+            if self.skinport_realtime_enabled:
+                raise ValueError("Clear the documented access block before enabling realtime")
+            if (
+                self.skinport_realtime_blocked_at.tzinfo is None
+                or self.skinport_realtime_blocked_at > datetime.now(UTC) + timedelta(minutes=5)
+            ):
+                raise ValueError("The access block requires a non-future timestamp with timezone")
         if self.database_url.startswith("sqlite") and self.environment not in {
             "development",
             "test",
