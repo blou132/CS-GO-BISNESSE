@@ -16,3 +16,11 @@
 artifacts
 backups
 .deployment
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/credentials
+**/secrets
+**/*.env
+**/*.env.backup-*
